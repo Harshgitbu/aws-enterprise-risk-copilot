@@ -1,0 +1,60 @@
+# AWS Credentials
+.env
+*.pem
+*.key
+credentials.json
+aws-risk-copilot-credentials.md
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.env/
+.venv/
+pip-wheel-metadata/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-*
+
+# OS
+.DS_Store
+Thumbs.db
+*.db
+
+# Docker
+data/
+logs/
+*.log
+docker-compose.override.yml
+
+# ML/AI
+models/
+embeddings/
+*.index
+*.bin
+*.pkl
+*.joblib
+
+# Application
+instance/
+*.sqlite
+*.db
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# Temporary
+temp/
+tmp/
+*.tmp
+*.temp
