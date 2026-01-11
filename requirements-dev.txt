@@ -1,0 +1,10 @@
+# Development dependencies (for local Mac)
+faiss-cpu==1.7.4
+numpy==1.24.3
+pytest==7.4.0
+black==23.11.0
+flake8==6.1.0
+python-dotenv==1.0.0
+
+# For testing without heavy dependencies
+pytest-mock==3.11.1
