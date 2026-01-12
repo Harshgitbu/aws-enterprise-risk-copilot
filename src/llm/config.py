@@ -1,5 +1,6 @@
 """
 LLM API configuration with rate limiting and quotas
+OPTIMIZED FOR: AWS t3.micro 1GB RAM, Google Free Tier (10 RPM), $0/month
 """
 import os
 from typing import Optional
@@ -15,21 +16,27 @@ load_dotenv()
 class APIConfig:
     """
     Configuration for external LLM APIs with free tier limits
+    YOUR ACTUAL FREE TIER: gemini-2.5-flash-lite (10 RPM, 250K TPM)
     """
     
-    # Google Gemini API (Free Tier: 60 requests/minute)
+    # Google Gemini API (YOUR FREE TIER: 10 requests/minute)
     GEMINI_API_KEY: Optional[str] = os.getenv("GOOGLE_API_KEY")
-    GEMINI_MODEL: str = "gemini-1.5-flash"  # Fast, cost-effective
-    GEMINI_MAX_TOKENS: int = 8192
-    GEMINI_RATE_LIMIT: int = 60  # requests per minute
+    GEMINI_MODEL: str = "gemini-2.5-flash-lite"  # Your actual free tier model
+    GEMINI_MAX_TOKENS: int = 2048  # Reduced for 1GB RAM efficiency
+    GEMINI_RATE_LIMIT: int = 8  # Conservative: 8 instead of 10 RPM for safety
     GEMINI_REQUEST_TIMEOUT: int = 30  # seconds
     
     # Hugging Face Inference API (Free Tier: 30k tokens/month)
     HF_TOKEN: Optional[str] = os.getenv("HUGGINGFACE_TOKEN")
     HF_EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
-    HF_LLM_MODEL: str = "mistralai/Mistral-7B-Instruct-v0.1"  # Efficient 7B model
-    HF_RATE_LIMIT: int = 10  # requests per minute (free tier)
+    HF_LLM_MODEL: str = "microsoft/phi-2"  # Lighter than Mistral-7B (2.7B vs 7B params)
+    HF_RATE_LIMIT: int = 5  # requests per minute (free tier conservative)
     HF_REQUEST_TIMEOUT: int = 60  # seconds
+    
+    # Memory optimization for 1GB RAM
+    MAX_CONTEXT_LENGTH: int = 1500  # chars
+    MAX_RESPONSE_LENGTH: int = 800  # chars
+    CACHE_MAX_ITEMS: int = 20  # Small cache for 1GB RAM
     
     # Cost tracking (Free Tier limits)
     MAX_MONTHLY_COST: float = 0.0  # $0 - stay within free tier
@@ -51,10 +58,11 @@ class APIConfig:
             logger.warning("Some features may not work without API keys")
             return False
         
-        logger.info("API configuration validated successfully")
-        logger.info(f"Gemini model: {cls.GEMINI_MODEL}")
-        logger.info(f"HF Embedding model: {cls.HF_EMBEDDING_MODEL}")
-        logger.info(f"HF LLM model: {cls.HF_LLM_MODEL}")
+        logger.info("✅ API configuration validated successfully")
+        logger.info(f"   Gemini model: {cls.GEMINI_MODEL} (Your free tier: 10 RPM)")
+        logger.info(f"   HF Embedding model: {cls.HF_EMBEDDING_MODEL}")
+        logger.info(f"   HF LLM model: {cls.HF_LLM_MODEL} (lightweight fallback)")
+        logger.info(f"   Memory optimized for: 1GB RAM, $0/month")
         
         return True
     
@@ -82,13 +90,15 @@ class APIConfig:
                 "timeout": cls.HF_REQUEST_TIMEOUT
             }
         else:
-            return {"requests_per_minute": 10, "timeout": 30}
+            return {"requests_per_minute": 5, "timeout": 30}
 
 # Validate on import
 config_valid = APIConfig.validate_config()
 
 if __name__ == "__main__":
-    print("=== LLM API Configuration ===")
-    print(f"Gemini API Key configured: {'Yes' if APIConfig.GEMINI_API_KEY else 'No'}")
-    print(f"HF Token configured: {'Yes' if APIConfig.HF_TOKEN else 'No'}")
-    print(f"Config valid: {config_valid}")
+    print("=== AWS RISK COPILOT - FREE TIER CONFIG ===")
+    print(f"EC2: t3.micro (1GB RAM)")
+    print(f"Gemini: {APIConfig.GEMINI_MODEL} (Your free tier: 10 RPM)")
+    print(f"Gemini API: {'✅ Ready' if APIConfig.GEMINI_API_KEY else '❌ Missing'}")
+    print(f"HF Token: {'✅ Ready' if APIConfig.HF_TOKEN else '❌ Missing'}")
+    print(f"Config valid: {'✅ Yes' if config_valid else '⚠️ Partial'}")
