@@ -36,3 +36,4 @@ aiohttp==3.9.1
 google-generativeai==0.3.0
 aiohttp==3.9.1
 httpx==0.25.1
+huggingface_hub>=1.2.0
