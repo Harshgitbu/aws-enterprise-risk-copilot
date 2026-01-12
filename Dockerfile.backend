@@ -1,20 +1,39 @@
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies for FAISS and other libraries
 RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
+    build-essential \
+    wget \
     curl \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
 COPY requirements.txt .
+
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application
-COPY src/backend/ ./backend/
+# Copy application code
+COPY src/ ./src/
+COPY documents/ ./documents/
+COPY data/ ./data/
 
-# Run FastAPI
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+# Create necessary directories
+RUN mkdir -p /app/data/vector_store /app/data/cache
+
+# Environment variables for FAISS OpenMP fix
+ENV KMP_DUPLICATE_LIB_OK=TRUE
+ENV OMP_NUM_THREADS=1
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8000/health || exit 1
+
+# Run the application
+CMD ["uvicorn", "src.backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
