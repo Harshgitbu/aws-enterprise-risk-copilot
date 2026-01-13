@@ -1,39 +1,40 @@
 FROM python:3.11-slim
 
+# Set environment variables for memory/disk optimization
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV OMP_NUM_THREADS=1
+ENV KMP_DUPLICATE_LIB_OK=TRUE
+ENV TF_CPP_MIN_LOG_LEVEL=3
+ENV TOKENIZERS_PARALLELISM=false
+
 WORKDIR /app
 
-# Install system dependencies for FAISS and other libraries
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    wget \
+# Minimal system dependencies ONLY
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
     curl \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /var/cache/apt/*
 
-# Copy requirements
+# Copy requirements and install with minimal disk usage
 COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt \
+    && rm -rf /root/.cache/pip/*
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Create essential directories
+RUN mkdir -p /app/data/vector_store
 
-# Copy application code
-COPY src/ ./src/
-COPY documents/ ./documents/
-COPY data/ ./data/
-
-# Create necessary directories
-RUN mkdir -p /app/data/vector_store /app/data/cache
-
-# Environment variables for FAISS OpenMP fix
-ENV KMP_DUPLICATE_LIB_OK=TRUE
-ENV OMP_NUM_THREADS=1
+# Copy ENTIRE src directory structure
+COPY src/ /app/src/
 
 # Expose port
 EXPOSE 8000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+# Simple health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:8000/health || exit 1
 
-# Run the application
+# Run with minimal workers
 CMD ["uvicorn", "src.backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

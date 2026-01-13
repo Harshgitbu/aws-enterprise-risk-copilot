@@ -1,42 +1,18 @@
 version: '3.8'
 
 services:
-  # Redis for caching
   redis:
     image: redis:7-alpine
     container_name: risk-copilot-redis
     ports:
       - "6379:6379"
-    command: redis-server --maxmemory 50mb --maxmemory-policy allkeys-lru
-    volumes:
-      - redis_data:/data
-    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 10s
+      interval: 10s
+      timeout: 5s
       retries: 3
 
-  # PostgreSQL for metadata (optional)
-  postgres:
-    image: postgres:15-alpine
-    container_name: risk-copilot-postgres
-    environment:
-      POSTGRES_USER: risk_user
-      POSTGRES_PASSWORD: risk_password
-      POSTGRES_DB: risk_copilot
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U risk_user"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # Backend API
   backend:
     build:
       context: .
@@ -47,54 +23,9 @@ services:
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_USER=risk_user
-      - POSTGRES_PASSWORD=risk_password
-      - POSTGRES_DB=risk_copilot
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN}
-      - KMP_DUPLICATE_LIB_OK=TRUE  # Fix for FAISS OpenMP issue
-    volumes:
-      - ./src:/app/src
-      - ./documents:/app/documents
-      - ./data:/app/data
     depends_on:
       redis:
         condition: service_healthy
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 800M  # 800MB for backend (leaves 200MB for system)
-        reservations:
-          memory: 700M
-    command: >
-      sh -c "sleep 5 &&
-             uvicorn src.backend.main:app --host 0.0.0.0 --port 8000 --workers 1"
-
-  # Frontend (Day 7)
-  frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
-    container_name: risk-copilot-frontend
-    ports:
-      - "8501:8501"
-    environment:
-      - BACKEND_URL=http://backend:8000
-    depends_on:
-      - backend
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 200M
-        reservations:
-          memory: 150M
-
-volumes:
-  redis_data:
-  postgres_data:
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
