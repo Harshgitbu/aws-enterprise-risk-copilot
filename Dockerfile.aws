@@ -1,0 +1,44 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install minimal system dependencies for AWS
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Copy requirements
+COPY requirements.txt .
+
+# Install Python packages with minimal footprint
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt \
+    && rm -rf /root/.cache/pip
+
+# Copy application code
+COPY src/ ./src/
+
+# Create directories
+RUN mkdir -p /app/data /app/logs
+
+# Non-root user for security
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
+# Health check optimized for AWS
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; import json; \
+    data = urllib.request.urlopen('http://localhost:8000/health').read(); \
+    result = json.loads(data); exit(0 if result.get('status') == 'healthy' else 1)"
+
+# Expose port
+EXPOSE 8000
+
+# Memory limit awareness
+ENV MEMORY_LIMIT_MB=1024
+ENV AWS_REGION=us-east-1
+
+# Run with optimized settings for 1GB RAM
+CMD ["uvicorn", "src.backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--limit-concurrency", "100", "--timeout-keep-alive", "30"]
