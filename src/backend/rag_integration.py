@@ -1,175 +1,240 @@
 """
-RAG integration module - connects vector store with LLM service
-Optimized for 1GB RAM constraint
+RAG Pipeline Integration for AWS Risk Copilot
+Memory-optimized for 1GB RAM constraint - ASYNC VERSION
 """
-import sys
+import os
+import logging
 import json
+import hashlib
+from typing import Dict, List, Any, Optional
+import asyncio
 
-# Add /app/src to path for imports
-sys.path.insert(0, '/app/src')
-
-# Import with correct class names (check actual names in files)
-from rag.vector_store import MemoryEfficientFAISS as VectorStore
-from rag.embedding import EmbeddingService
+from rag.embedding import embedding_service
 from rag.document_processor import DocumentProcessor
-from llm.llm_service import UnifiedLLMService as LLMService
+from rag.vector_store import MemoryEfficientFAISS
+from llm.llm_service_async import async_llm_service
+
+logger = logging.getLogger(__name__)
 
 class RAGPipeline:
-    """Memory-optimized RAG pipeline for risk analysis"""
+    """Memory-efficient RAG pipeline with caching"""
     
     def __init__(self):
-        # Initialize with lazy loading
-        self.vector_store = None
-        self.embedding_service = None
-        self.document_processor = None
-        self.llm_service = None
+        self.embedding_service = embedding_service
+        self.document_processor = DocumentProcessor()
+        self.vector_store = MemoryEfficientFAISS()
+        self.llm_service = async_llm_service
+        self.cache_ttl = 3600  # 1 hour cache
         
-    def initialize_components(self):
-        """Lazy initialization of components to save memory"""
-        if self.embedding_service is None:
-            self.embedding_service = EmbeddingService()
-        
-        if self.vector_store is None:
-            self.vector_store = VectorStore(
-                embedding_service=self.embedding_service,
-                index_path="/app/data/vector_store/faiss_index"
-            )
-        
-        if self.document_processor is None:
-            self.document_processor = DocumentProcessor()
-        
-        if self.llm_service is None:
-            self.llm_service = LLMService()
+        # Load vector store if exists
+        self._load_vector_store()
     
-    def analyze_risk(self, query: str, document_text: str = "", top_k: int = 3, redis_client = None):
+    def _load_vector_store(self):
+        """Load FAISS vector store from disk"""
+        try:
+            if os.path.exists("data/faiss_index.index"):
+                self.vector_store.load("data/faiss_index.index")
+                logger.info(f"✅ Loaded vector store with {self.vector_store.get_vector_count()} vectors")
+            else:
+                logger.warning("No existing vector store found. Will create new one.")
+        except Exception as e:
+            logger.error(f"Failed to load vector store: {e}")
+    
+    async def _get_cached_response(self, query: str) -> Optional[Dict[str, Any]]:
+        """Get cached response for query"""
+        try:
+            from backend.redis_cache import redis_cache
+            cache_key = f"rag_response:{hashlib.md5(query.encode()).hexdigest()}"
+            cached = await redis_cache.get(cache_key)
+            return cached
+        except Exception as e:
+            logger.debug(f"Cache read error: {e}")
+            return None
+    
+    async def _cache_response(self, query: str, response: Dict[str, Any]):
+        """Cache response for query"""
+        try:
+            from backend.redis_cache import redis_cache
+            cache_key = f"rag_response:{hashlib.md5(query.encode()).hexdigest()}"
+            await redis_cache.set(cache_key, response, self.cache_ttl)
+        except Exception as e:
+            logger.debug(f"Cache write error: {e}")
+    
+    async def analyze_risk(self, query: str, use_cache: bool = True) -> Dict[str, Any]:
         """
-        Analyze risk using RAG pipeline
+        Analyze risk using RAG pipeline (async)
         
         Args:
-            query: Risk query
-            document_text: Optional document text for context
-            top_k: Number of results to return
-            redis_client: Redis client for caching
-        
+            query: User query about risk
+            use_cache: Whether to use cached responses
+            
         Returns:
-            Dictionary with risk analysis
+            Dictionary with answer and metadata
         """
-        # Initialize components if needed
-        self.initialize_components()
+        logger.info(f"Analyzing risk query: {query[:100]}...")
         
         # Check cache first
-        cache_key = f"risk:{hash(query + document_text)}"
-        if redis_client:
-            try:
-                cached = redis_client.get(cache_key)
-                if cached:
-                    return json.loads(cached)
-            except:
-                pass
+        if use_cache:
+            cached_response = await self._get_cached_response(query)
+            if cached_response:
+                logger.info("Cache hit for query")
+                cached_response['cache_hit'] = True
+                return cached_response
         
-        # Process document if provided
-        chunks = []
-        if document_text:
-            chunks = self.document_processor.chunk_document(
-                document_text,
-                chunk_size=500,
-                chunk_overlap=50
-            )
+        try:
+            # Generate query embedding (async)
+            query_embedding = await self.embedding_service.get_embedding(query)
+            if query_embedding is None:
+                return {
+                    "error": "Failed to generate query embedding",
+                    "answer": "I apologize, but I encountered an error processing your query.",
+                    "sources": [],
+                    "cache_hit": False
+                }
             
-            # Add to vector store temporarily
-            if chunks:
-                self.vector_store.add_documents(chunks)
-        
-        # Search for relevant documents
-        try:
-            search_results = self.vector_store.search(query, top_k=top_k)
-        except:
-            # If vector store is empty, return empty results
-            search_results = []
-        
-        # Generate context
-        context = "\n".join([
-            f"[Document {i+1}]: {result['content'][:200]}..."
-            for i, result in enumerate(search_results)
-        ]) if search_results else "No relevant documents found."
-        
-        # Generate risk analysis using LLM
-        prompt = f"""
-        Analyze the following cybersecurity/cloud risk query:
-        
-        Query: {query}
-        
-        Context from documents:
-        {context}
-        
-        Provide a risk analysis with:
-        1. Risk level (Low/Medium/High/Critical)
-        2. Key findings
-        3. Recommendations
-        4. Immediate actions
-        
-        Format the response as a JSON object.
-        """
-        
-        try:
-            # Try Gemini first (free tier)
-            response = self.llm_service.generate(
+            # Search for similar documents
+            search_results = self.vector_store.search(query_embedding, k=3)
+            
+            # Prepare context from search results
+            context_parts = []
+            sources = []
+            
+            for i, (doc_text, similarity, metadata) in enumerate(search_results):
+                context_parts.append(f"[Document {i+1}, Relevance: {similarity:.2f}]\n{doc_text}")
+                if metadata and 'source' in metadata:
+                    sources.append(metadata['source'])
+            
+            context = "\n\n".join(context_parts) if context_parts else "No relevant documents found."
+            
+            # Prepare prompt for LLM
+            prompt = f"""You are an AI Risk Intelligence Assistant. Analyze the following query about risks, using the provided context.
+
+Query: {query}
+
+Context from risk documents:
+{context}
+
+Based on the context above, provide:
+1. A comprehensive risk analysis
+2. Potential impacts
+3. Recommended mitigation strategies
+4. Any limitations or assumptions in your analysis
+
+If the context doesn't contain relevant information, acknowledge this and provide general risk management advice.
+
+Response:"""
+            
+            # Get LLM response
+            llm_response = await self.llm_service.generate_response(
                 prompt=prompt,
-                use_gemini=True,
-                max_tokens=500
+                max_tokens=500,
+                temperature=0.3
             )
             
-            # Parse response
+            # Prepare response
+            response = {
+                "query": query,
+                "answer": llm_response,
+                "sources": sources[:5],  # Limit to top 5 sources
+                "context_used": bool(context_parts),
+                "documents_retrieved": len(search_results),
+                "cache_hit": False
+            }
+            
+            # Cache the response
             try:
-                result = json.loads(response)
-            except:
-                # If not JSON, create structured response
-                result = {
-                    "risk_level": "Medium",
-                    "findings": ["Analysis completed"],
-                    "recommendations": ["Review the findings"],
-                    "actions": ["Monitor the situation"],
-                    "analysis": response[:500] if response else "No analysis generated",
-                    "source": "gemini"
-                }
+                await self._cache_response(query, response)
+            except Exception as e:
+                logger.debug(f"Failed to cache response: {e}")
             
-            # Add search context
-            result["search_results"] = [
-                {
-                    "content": r["content"][:100] + "...",
-                    "score": r["score"]
-                }
-                for r in search_results[:2]
-            ]
-            
-            # Cache the result
-            if redis_client:
-                try:
-                    redis_client.setex(
-                        cache_key,
-                        300,  # 5 minutes TTL
-                        json.dumps(result)
-                    )
-                except:
-                    pass
-            
-            return result
+            return response
             
         except Exception as e:
-            # Fallback response
+            logger.error(f"Error in RAG pipeline: {e}", exc_info=True)
             return {
-                "risk_level": "Unknown",
                 "error": str(e),
-                "source": "fallback",
-                "search_results": search_results
+                "answer": "I apologize, but I encountered an error processing your risk analysis request. Please try again.",
+                "sources": [],
+                "cache_hit": False
             }
+    
+    async def add_documents(self, documents: List[Dict[str, Any]]):
+        """
+        Add documents to vector store (async)
+        
+        Args:
+            documents: List of documents with text and metadata
+        """
+        try:
+            # Process documents
+            processed_docs = []
+            all_texts = []
+            all_metadatas = []
+            
+            for doc in documents:
+                chunks = self.document_processor.chunk_document(
+                    doc.get('text', ''),
+                    chunk_size=500,
+                    chunk_overlap=50
+                )
+                
+                for chunk in chunks:
+                    all_texts.append(chunk)
+                    all_metadatas.append({
+                        'source': doc.get('source', 'unknown'),
+                        'type': doc.get('type', 'document'),
+                        'timestamp': doc.get('timestamp', '')
+                    })
+            
+            # Generate embeddings in batches (async)
+            embeddings = await self.embedding_service.get_embeddings_batch(all_texts)
+            
+            # Filter out None embeddings
+            valid_data = []
+            for text, embedding, metadata in zip(all_texts, embeddings, all_metadatas):
+                if embedding is not None:
+                    valid_data.append((text, embedding, metadata))
+            
+            if valid_data:
+                # Add to vector store
+                texts, embeds, metadatas = zip(*valid_data)
+                self.vector_store.add_documents(list(texts), list(embeds), list(metadatas))
+                
+                # Save vector store
+                self.vector_store.save("data/faiss_index.index")
+                
+                logger.info(f"✅ Added {len(valid_data)} document chunks to vector store")
+                return {"status": "success", "added": len(valid_data)}
+            else:
+                return {"status": "error", "message": "No valid embeddings generated"}
+                
+        except Exception as e:
+            logger.error(f"Error adding documents: {e}")
+            return {"status": "error", "message": str(e)}
+    
+    async def get_stats(self) -> Dict[str, Any]:
+        """Get pipeline statistics (async)"""
+        stats = {
+            "vector_store": self.vector_store.get_stats(),
+        }
+        
+        try:
+            llm_stats = await self.llm_service.get_stats()
+            stats["llm_service"] = llm_stats
+        except Exception as e:
+            stats["llm_service_error"] = str(e)
+        
+        try:
+            embedding_stats = await self.embedding_service.get_stats()
+            stats["embedding_service"] = embedding_stats
+        except Exception as e:
+            stats["embedding_service_error"] = str(e)
+        
+        return stats
 
-# Singleton instance
-_rag_pipeline = None
+# Global RAG pipeline instance
+rag_pipeline = RAGPipeline()
 
 def get_rag_pipeline():
-    """Get singleton RAG pipeline instance"""
-    global _rag_pipeline
-    if _rag_pipeline is None:
-        _rag_pipeline = RAGPipeline()
-    return _rag_pipeline
+    """Get the global RAG pipeline instance"""
+    return rag_pipeline

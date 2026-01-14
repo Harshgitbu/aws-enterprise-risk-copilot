@@ -20,7 +20,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy requirements and install with minimal disk usage
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir websockets==12.0 circuitbreaker==1.4.0 \
     && rm -rf /root/.cache/pip/*
 
 # Create essential directories
