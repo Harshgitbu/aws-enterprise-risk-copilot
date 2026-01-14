@@ -31,8 +31,8 @@ class StreamBroadcaster:
                     host=self.redis_host,
                     port=self.redis_port,
                     decode_responses=True,
-                    socket_timeout=5,
-                    socket_connect_timeout=5
+                    socket_timeout=10,
+                    socket_connect_timeout=10
                 )
                 await self.client.ping()
                 logger.info(f"✅ StreamBroadcaster connected to Redis")
@@ -58,20 +58,20 @@ class StreamBroadcaster:
                 raise
     
     async def broadcast_new_alerts(self):
-        """Continuously read and broadcast new alerts"""
+        """Continuously read and broadcast new alerts - with better error handling"""
         logger.info("Starting alert broadcaster")
         
         last_id = ">"
         
         while self.active:
             try:
-                # Read new messages
+                # Read new messages with longer timeout
                 messages = await self.client.xreadgroup(
                     groupname=self.consumer_group,
                     consumername=self.consumer_name,
                     streams={self.stream_key: last_id},
                     count=10,
-                    block=5000  # 5 second block
+                    block=10000  # Increased to 10 seconds
                 )
                 
                 if messages:
@@ -90,11 +90,20 @@ class StreamBroadcaster:
                             last_id = message_id
                             
                             logger.debug(f"Broadcast alert: {message_id}")
+                else:
+                    # No messages, small sleep to reduce CPU
+                    await asyncio.sleep(1)
                 
                 # Check memory every iteration
                 await websocket_manager.check_memory_limits()
                 
+            except asyncio.TimeoutError:
+                # Redis timeout is normal when no messages
+                continue
             except Exception as e:
+                if "timeout" in str(e).lower() or "Timeout" in str(e):
+                    # Redis timeout, continue
+                    continue
                 logger.error(f"Error in broadcaster: {e}")
                 await asyncio.sleep(5)  # Wait before retry
     
