@@ -1,41 +1,32 @@
 FROM python:3.11-slim
 
-# Set environment variables for memory/disk optimization
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-ENV OMP_NUM_THREADS=1
-ENV KMP_DUPLICATE_LIB_OK=TRUE
-ENV TF_CPP_MIN_LOG_LEVEL=3
-ENV TOKENIZERS_PARALLELISM=false
-
 WORKDIR /app
 
-# Minimal system dependencies ONLY
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
     gcc \
-    curl \
-    && rm -rf /var/lib/apt/lists/* \
-    && rm -rf /var/cache/apt/*
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install with minimal disk usage
+# Copy requirements first for better caching
 COPY requirements.txt .
+
+# Install Python packages with minimal cache
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
-RUN pip install --no-cache-dir websockets==12.0 circuitbreaker==1.4.0 \
-    && rm -rf /root/.cache/pip/*
 
-# Create essential directories
-RUN mkdir -p /app/data/vector_store
+# Copy application code (from root context)
+COPY src/ ./src/
 
-# Copy ENTIRE src directory structure
-COPY src/ /app/src/
+# Create necessary directories
+RUN mkdir -p /app/data /app/logs
 
 # Expose port
 EXPOSE 8000
 
-# Simple health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:8000/health || exit 1
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
 
-# Run with minimal workers
+# Run application
 CMD ["uvicorn", "src.backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
