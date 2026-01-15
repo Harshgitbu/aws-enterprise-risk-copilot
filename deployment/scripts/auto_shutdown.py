@@ -166,25 +166,30 @@ class AutoShutdownManager:
                 logger.error(f"Error in auto-shutdown monitor: {e}")
                 time.sleep(60)
 
-# Create systemd service file template
-cat > risk-copilot-autoshutdown.service << 'EOF'
-[Unit]
-Description=AWS Risk Copilot Auto-Shutdown Service
-After=network.target docker.service
-Requires=docker.service
+# Separate systemd service file - REMOVED FROM PYTHON FILE
+# Create it as a separate file instead
 
-[Service]
-Type=simple
-User=ubuntu
-WorkingDirectory=/home/ubuntu/aws-enterprise-risk-copilot
-ExecStart=/usr/bin/python3 /home/ubuntu/aws-enterprise-risk-copilot/auto_shutdown.py
-Restart=on-failure
-RestartSec=30
-StandardOutput=journal
-StandardError=journal
-
-# Safety: Don't restart if shutdown was intentional
-RestartPreventExitStatus=0
-
-[Install]
-WantedBy=multi-user.target
+if __name__ == "__main__":
+    # Configure based on environment
+    import sys
+    
+    # Parse command line arguments
+    import argparse
+    parser = argparse.ArgumentParser(description='Auto-shutdown manager for AWS Risk Copilot')
+    parser.add_argument('--idle-threshold', type=int, default=30, help='Idle threshold in minutes')
+    parser.add_argument('--daily-uptime', type=int, default=8, help='Daily uptime limit in hours')
+    parser.add_argument('--disable', action='store_true', help='Disable auto-shutdown')
+    
+    args = parser.parse_args()
+    
+    if args.disable:
+        print("Auto-shutdown disabled")
+        sys.exit(0)
+    
+    # Create and run manager
+    manager = AutoShutdownManager(
+        idle_threshold_minutes=args.idle_threshold,
+        daily_uptime_hours=args.daily_uptime
+    )
+    
+    manager.run()
