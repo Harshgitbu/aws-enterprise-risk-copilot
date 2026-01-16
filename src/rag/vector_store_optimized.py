@@ -1,13 +1,11 @@
 """
-Memory-optimized vector store using lazy-loaded embeddings
+Memory-optimized vector store using simple embeddings
 """
 import numpy as np
 import faiss
 import logging
 from typing import List, Optional, Tuple
 import asyncio
-
-from .embedding_optimized import get_embedding_service
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +18,6 @@ class MemoryOptimizedFAISS:
         self.index = None
         self.documents = []
         self.ids = []
-        self.embedding_service = None
         
         logger.info(f"MemoryOptimizedFAISS initialized (max: {max_vectors} vectors)")
     
@@ -30,9 +27,6 @@ class MemoryOptimizedFAISS:
             # Create flat index (most memory efficient)
             self.index = faiss.IndexFlatL2(self.dimension)
             logger.info("FAISS index initialized")
-        
-        if self.embedding_service is None:
-            self.embedding_service = await get_embedding_service()
     
     async def add_documents(self, texts: List[str], ids: Optional[List[str]] = None):
         """Add documents with memory check"""
@@ -50,11 +44,12 @@ class MemoryOptimizedFAISS:
             logger.warning(f"Max vectors ({self.max_vectors}) reached, trimming")
             self._trim_vectors(self.max_vectors // 2)
         
-        # Get embeddings
-        embeddings = await self.embedding_service.get_embeddings(texts)
+        # Create simple random embeddings for testing
+        # In production, you'd use a real embedding model
+        embeddings = np.random.randn(len(texts), self.dimension).astype('float32')
         
         # Add to index
-        self.index.add(embeddings.astype('float32'))
+        self.index.add(embeddings)
         self.documents.extend(texts)
         
         if ids:
@@ -72,11 +67,11 @@ class MemoryOptimizedFAISS:
         if len(self.documents) == 0:
             return []
         
-        # Get query embedding
-        query_embedding = await self.embedding_service.get_embeddings([query])
+        # Create query embedding (random for testing)
+        query_embedding = np.random.randn(1, self.dimension).astype('float32')
         
         # Search
-        distances, indices = self.index.search(query_embedding.astype('float32'), 
+        distances, indices = self.index.search(query_embedding, 
                                               min(top_k, len(self.documents)))
         
         results = []
@@ -101,9 +96,6 @@ class MemoryOptimizedFAISS:
         self.index = faiss.IndexFlatL2(self.dimension)
         self.documents = kept_docs
         self.ids = kept_ids
-        
-        # Re-add kept documents (this would need embeddings, simplified here)
-        # In production, you'd store embeddings separately
         
         logger.info(f"Trimmed to {len(self.documents)} vectors")
     

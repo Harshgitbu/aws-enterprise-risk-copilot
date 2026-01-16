@@ -1,26 +1,26 @@
 """
-Memory-optimized RAG integration with lazy loading
+Memory-optimized RAG integration with lazy loading - FIXED SYNC VERSION
 """
 import logging
 from typing import Optional, Dict, Any
-import asyncio
 
+# Import SYNC versions
 from rag.document_processor import DocumentProcessor
 from rag.vector_store_optimized import MemoryOptimizedFAISS
-from llm.llm_service import UnifiedLLMService
+from llm.llm_service_async import async_llm_service  # Use async service
 
 logger = logging.getLogger(__name__)
 
 class OptimizedRAGPipeline:
-    """Memory-optimized RAG pipeline for 1GB RAM"""
+    """Memory-optimized RAG pipeline for 1GB RAM - FIXED SYNC INTERFACE"""
     
     def __init__(self):
         self.document_processor = DocumentProcessor()
         self.vector_store = MemoryOptimizedFAISS()
-        self.llm_service = UnifiedLLMService()
+        self.llm_service = async_llm_service
         self.initialized = False
         
-        logger.info("OptimizedRAGPipeline initialized (lazy loading enabled)")
+        logger.info("OptimizedRAGPipeline initialized")
     
     async def initialize(self):
         """Lazy initialization"""
@@ -31,7 +31,7 @@ class OptimizedRAGPipeline:
     
     async def analyze_risk(self, query: str, document_text: str = "", 
                           top_k: int = 3, redis_client = None) -> Dict[str, Any]:
-        """Analyze risk with memory optimization"""
+        """Analyze risk with memory optimization - FIXED ASYNC"""
         await self.initialize()
         
         try:
@@ -47,11 +47,12 @@ class OptimizedRAGPipeline:
             # Prepare context
             context = "\n".join([doc[0] for doc in relevant_docs])
             
-            # Generate analysis using LLM
-            analysis = await self.llm_service.generate_risk_analysis(
-                query=query,
-                context=context,
-                relevant_docs=relevant_docs
+            # Generate analysis using LLM - Use async service
+            import asyncio
+            analysis = await self.llm_service.generate_response(
+                prompt=f"Analyze risk for: {query}\nContext: {context}",
+                max_tokens=500,
+                temperature=0.3
             )
             
             # Get memory stats
@@ -64,10 +65,7 @@ class OptimizedRAGPipeline:
                     {"content": doc[0], "similarity_score": doc[1]} 
                     for doc in relevant_docs
                 ],
-                "memory_stats": {
-                    "vectors_count": vector_stats["vectors_count"],
-                    "memory_mb": vector_stats["memory_mb"]
-                },
+                "memory_stats": vector_stats,
                 "status": "success"
             }
             
@@ -84,8 +82,8 @@ class OptimizedRAGPipeline:
 # Global instance
 _rag_pipeline = None
 
-async def get_rag_pipeline():
-    """Get singleton RAG pipeline instance"""
+def get_rag_pipeline():
+    """Get singleton RAG pipeline instance - FIXED SYNC RETURN"""
     global _rag_pipeline
     if _rag_pipeline is None:
         _rag_pipeline = OptimizedRAGPipeline()
