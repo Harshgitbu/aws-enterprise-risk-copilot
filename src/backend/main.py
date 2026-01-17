@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
-from typing import Dict, Any
+from typing import Dict, Any, List  # FIXED: Added List import
 
 # Add the src directory to Python path for imports
 sys.path.append('/app/src')
@@ -34,16 +34,10 @@ except ImportError as e:
     logger.warning(f"Redis import error: {e}")
     REDIS_AVAILABLE = False
 
-# WebSocket imports
-try:
-    from backend.websocket.websocket_manager import websocket_manager
-    from backend.websocket.stream_broadcaster import stream_broadcaster
-    WEBSOCKET_AVAILABLE = True
-except ImportError as e:
-    logger.warning(f"WebSocket imports error: {e}")
-    websocket_manager = None
-    stream_broadcaster = None
-    WEBSOCKET_AVAILABLE = False
+# WebSocket imports - SIMPLIFIED (module doesn't exist)
+websocket_manager = None
+stream_broadcaster = None
+WEBSOCKET_AVAILABLE = False
 
 import asyncio
 import time
@@ -273,10 +267,6 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         content={"error": exc.detail}
     )
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-
 # ==================== DAY 5: WEB SOCKET STATS ====================
 
 @app.get("/ws/stats")
@@ -442,3 +432,422 @@ async def get_recent_alerts(count: int = 10):
         logger.error(f"Error getting recent alerts: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# ==================== SEC EDGAR INTEGRATION ====================
+
+@app.post("/sec/fetch-risk-data")
+async def fetch_sec_risk_data(max_companies: int = 3):
+    """
+    Fetch SEC risk data for companies
+    
+    Args:
+        max_companies: Maximum number of companies to fetch (default: 3)
+    """
+    try:
+        # Import inside function to avoid circular imports
+        from data.sec_loader import SECDataLoader
+        
+        loader = SECDataLoader()
+        
+        # Fetch fresh data
+        risk_data = loader.fetch_fresh_risk_data(max_companies=max_companies)
+        
+        # If no data fetched, use sample data
+        if not risk_data:
+            risk_data = loader.get_sample_data()
+            loader.save_to_cache(risk_data)
+        
+        return {
+            "status": "success",
+            "message": f"Fetched {len(risk_data)} risk entries",
+            "companies": [f"{d['company_name']} ({d['ticker']})" for d in risk_data],
+            "total_chars": sum(d['text_length'] for d in risk_data),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching SEC data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/sec/stats")
+async def get_sec_stats():
+    """Get SEC data statistics"""
+    try:
+        from data.sec_loader import SECDataLoader
+        
+        loader = SECDataLoader()
+        risk_data = loader.load_cached_risk_data()
+        
+        # If no cache, use sample
+        if not risk_data:
+            risk_data = loader.get_sample_data()
+        
+        # Group by company
+        companies = {}
+        for entry in risk_data:
+            company = entry['company_name']
+            if company not in companies:
+                companies[company] = {
+                    "ticker": entry['ticker'],
+                    "years": [],
+                    "total_chars": 0
+                }
+            companies[company]["years"].append(entry['filing_year'])
+            companies[company]["total_chars"] += entry['text_length']
+        
+        return {
+            "status": "success",
+            "total_entries": len(risk_data),
+            "companies_count": len(companies),
+            "companies": {
+                name: {
+                    "ticker": info["ticker"],
+                    "years": info["years"],
+                    "entries": len(info["years"]),
+                    "total_chars": info["total_chars"]
+                }
+                for name, info in companies.items()
+            },
+            "cache_file": loader.cache_file,
+            "cache_exists": os.path.exists(loader.cache_file) if hasattr(loader, 'cache_file') else False,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting SEC stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/sec/load-to-rag")
+async def load_sec_to_rag():
+    """
+    Load SEC risk data into RAG vector store
+    """
+    try:
+        from data.sec_loader import SECDataLoader
+        
+        loader = SECDataLoader()
+        
+        # Load cached data
+        risk_data = loader.load_cached_risk_data()
+        
+        # If no cache, use sample data
+        if not risk_data:
+            risk_data = loader.get_sample_data()
+            loader.save_to_cache(risk_data)
+        
+        # Prepare documents for vector store
+        documents = loader.prepare_for_vector_store(risk_data)
+        
+        # Load into RAG pipeline
+        rag_pipeline = get_rag_pipeline()
+        await rag_pipeline.initialize()
+        
+        added_count = 0
+        for doc in documents:
+            success = await rag_pipeline.vector_store.add_documents(
+                texts=[doc["text"]],
+                metadatas=[doc["metadata"]]
+            )
+            if success:
+                added_count += 1
+        
+        # Get vector store stats
+        stats = rag_pipeline.vector_store.get_stats()
+        
+        return {
+            "status": "success",
+            "message": f"Loaded {added_count}/{len(documents)} documents into RAG",
+            "documents_loaded": added_count,
+            "companies": list(set([d['metadata']['company'] for d in documents])),
+            "vector_store_stats": stats,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error loading SEC to RAG: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+# ==================== RISK ANALYSIS ENDPOINTS ====================
+
+@app.post("/analyze/company-risk")
+async def analyze_company_risk(company_data: dict):
+    """
+    Analyze risk for a specific company
+    
+    Expected JSON:
+    {
+        "company_name": "Apple Inc.",
+        "risk_text": "Risk factors text from SEC filing",
+        "ticker": "AAPL"
+    }
+    """
+    try:
+        from analysis.risk_scorer import get_risk_scorer
+        
+        company_name = company_data.get("company_name", "Unknown Company")
+        risk_text = company_data.get("risk_text", "")
+        ticker = company_data.get("ticker", "")
+        
+        if not risk_text:
+            raise HTTPException(status_code=400, detail="risk_text is required")
+        
+        scorer = get_risk_scorer()
+        analysis = scorer.analyze_risk_text(risk_text)
+        
+        return {
+            "status": "success",
+            "company": company_name,
+            "ticker": ticker,
+            "analysis": analysis,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error analyzing company risk: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/analyze/compare-companies")
+async def compare_companies(companies_data: List[dict]):
+    """
+    Compare risk across multiple companies
+    
+    Expected JSON:
+    [
+        {
+            "company_name": "Apple Inc.",
+            "risk_text": "Risk factors text...",
+            "ticker": "AAPL"
+        },
+        {
+            "company_name": "Microsoft Corp",
+            "risk_text": "Risk factors text...",
+            "ticker": "MSFT"
+        }
+    ]
+    """
+    try:
+        from analysis.risk_scorer import get_risk_scorer
+        
+        if len(companies_data) < 2:
+            raise HTTPException(status_code=400, detail="At least 2 companies required for comparison")
+        
+        scorer = get_risk_scorer()
+        
+        # Analyze each company
+        company_analyses = {}
+        for company_data in companies_data:
+            company_name = company_data.get("company_name", "Unknown")
+            risk_text = company_data.get("risk_text", "")
+            ticker = company_data.get("ticker", "")
+            
+            if risk_text:
+                analysis = scorer.analyze_risk_text(risk_text)
+                key = f"{company_name} ({ticker})" if ticker else company_name
+                company_analyses[key] = analysis
+        
+        # Compare companies
+        comparison = scorer.compare_companies(company_analyses)
+        
+        return {
+            "status": "success",
+            "companies_analyzed": len(company_analyses),
+            "comparison": comparison,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error comparing companies: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/copilot/ask")
+async def ask_copilot(query: dict):
+    """
+    Ask the AI copilot a question about risks
+    
+    Expected JSON:
+    {
+        "question": "Why is Apple's risk high?",
+        "context": {  # Optional: previous analysis results
+            "companies": {...},
+            "comparison": {...}
+        }
+    }
+    """
+    try:
+        from analysis.risk_scorer import get_risk_scorer
+        
+        question = query.get("question", "")
+        context = query.get("context", {})
+        
+        if not question:
+            raise HTTPException(status_code=400, detail="question is required")
+        
+        scorer = get_risk_scorer()
+        response = scorer.generate_copilot_response(question, context)
+        
+        return {
+            "status": "success",
+            "question": question,
+            "response": response,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in copilot: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/analysis/categories")
+async def get_risk_categories():
+    """Get all risk categories and keywords used by the risk scorer"""
+    try:
+        from analysis.risk_scorer import RiskScorer
+        
+        return {
+            "status": "success",
+            "categories": RiskScorer.RISK_CATEGORIES,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting categories: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==================== NEWS API INTEGRATION ====================
+
+@app.post("/news/fetch")
+async def fetch_news(max_companies: int = 5):
+    """
+    Fetch latest financial news for companies
+    
+    Args:
+        max_companies: Maximum number of companies to fetch news for
+    """
+    try:
+        # Check if Redis client is available
+        if not redis_client:
+            raise HTTPException(status_code=503, detail="Redis not available for news alerts")
+        
+        from news.news_integration import get_news_integration
+        
+        service = get_news_integration(redis_client=redis_client)
+        result = service.fetch_and_analyze_news(max_companies=max_companies)
+        
+        return {
+            "status": "success",
+            "message": f"Fetched news for {result['analysis'].get('companies_with_news', 0)} companies",
+            "analysis": result["analysis"],
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching news: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/news/latest")
+async def get_latest_news():
+    """Get latest news analysis from cache"""
+    try:
+        from news.news_integration import get_news_integration
+        
+        service = get_news_integration()
+        latest = service.get_latest_analysis()
+        
+        if not latest:
+            return {
+                "status": "success",
+                "message": "No recent news analysis found",
+                "analysis": {},
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        
+        return {
+            "status": "success",
+            "analysis": latest.get("analysis", {}),
+            "cached_at": latest.get("timestamp"),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting latest news: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/news/integrate-risk")
+async def integrate_news_risk(integration_request: dict):
+    """
+    Integrate SEC risk scores with news analysis
+    
+    Expected JSON:
+    {
+        "sec_scores": {
+            "Apple Inc.": {
+                "normalized_score": 75.5,
+                "ticker": "AAPL",
+                "category_scores": {...}
+            },
+            ...
+        }
+    }
+    """
+    try:
+        from news.news_integration import get_news_integration
+        from analysis.risk_scorer import get_risk_scorer
+        
+        sec_scores = integration_request.get("sec_scores", {})
+        
+        if not sec_scores:
+            raise HTTPException(status_code=400, detail="sec_scores is required")
+        
+        # Get latest news analysis
+        service = get_news_integration()
+        latest = service.get_latest_analysis()
+        
+        if not latest or "analysis" not in latest:
+            # Fetch fresh news if no cache
+            result = service.fetch_and_analyze_news(max_companies=5)
+            news_analysis = result["analysis"]
+        else:
+            news_analysis = latest["analysis"]
+        
+        # Integrate scores
+        integrated_scores = service.integrate_with_risk_scoring(sec_scores, {"analysis": news_analysis})
+        
+        return {
+            "status": "success",
+            "integrated_scores": integrated_scores,
+            "news_analysis_summary": {
+                "total_articles": news_analysis.get("total_articles", 0),
+                "average_risk_score": news_analysis.get("average_risk_score", 0),
+                "high_risk_alerts": len(news_analysis.get("high_risk_alerts", []))
+            },
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error integrating news risk: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/news/stats")
+async def get_news_stats():
+    """Get news API statistics"""
+    try:
+        from news.news_client import get_news_client
+        
+        client = get_news_client()
+        
+        return {
+            "status": "success",
+            "news_api": {
+                "enabled": client.enabled,
+                "rate_limit_remaining": client.rate_limit_remaining,
+                "cache_directory": client.cache_dir,
+                "default_companies": [c["name"] for c in client.DEFAULT_COMPANIES[:5]]
+            },
+            "risk_keywords": client.RISK_KEYWORDS[:10],  # First 10
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting news stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

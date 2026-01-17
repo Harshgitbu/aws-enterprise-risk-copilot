@@ -33,3 +33,6 @@ boto3==1.34.1  # AWS SDK
 pytest==7.4.3
 flake8==6.1.0
 black==23.11.0
+sentence-transformers
+torch --index-url https://download.pytorch.org/whl/cpu
+newsapi-python

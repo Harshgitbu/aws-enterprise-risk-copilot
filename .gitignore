@@ -1,95 +1,61 @@
-# AWS Credentials
-.env
-*.pem
-*.key
-credentials.json
-aws-risk-copilot-credentials.md
-
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-env/
-venv/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
 .env/
-.venv/
-pip-wheel-metadata/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-*.sublime-*
 
 # OS
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
-*.db
 
-# Docker
+# Project Specific
+.env
 data/
 logs/
 *.log
+*.sqlite3
+test_*.py
+test_*.json
+*.backup
+
+# Docker
 docker-compose.override.yml
 
-# ML/AI
-models/
-embeddings/
-*.index
-*.bin
-*.pkl
-*.joblib
-
-# Application
-instance/
-*.sqlite
-*.db
-.coverage
-htmlcov/
-*.egg-info/
-dist/
-build/
-
-# Temporary
-temp/
-tmp/
-*.tmp
-*.temp
-
-# Backup files
-*.backup
-*.backup_*
-*_backup
-*.attempt
-
-# EC2-specific files
-docker-compose.full.yml.ec2
-docker-compose.simple.yml
-requirements-ec2.txt
-deploy_ec2.sh
-deploy_to_aws.sh
-
-# Temporary files
-rag_integration_correct.py
-
-# EC2-specific configurations
-docker-compose.*.yml
-requirements-*.txt
-deploy_*.sh
-restore-*.sh
-
-# Backup files  
-*.backup*
-*_backup
-*.attempt
-*.correct.py
-
-# Temporary development files
-test_*
-fix_*
-debug_*
-create_*
-update_*
+# Streamlit
+.streamlit/
