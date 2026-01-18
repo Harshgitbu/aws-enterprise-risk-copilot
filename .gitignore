@@ -1,33 +1,21 @@
-# Python
+# Environment
+.env
+.env.local
+
+# Data and cache
+data/
+logs/
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
 
-# Virtual Environment
-.env/
-venv/
-env/
-ENV/
-env.bak/
-venv.bak/
+# Test files
+test_*.json
+*.log
+
+# Backups
+*.backup
+*.bak
 
 # IDE
 .vscode/
@@ -35,27 +23,5 @@ venv.bak/
 *.swp
 *.swo
 
-# OS
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Project Specific
-.env
-data/
-logs/
-*.log
-*.sqlite3
-test_*.py
-test_*.json
-*.backup
-
 # Docker
-docker-compose.override.yml
-
-# Streamlit
-.streamlit/
+*.tar.gz

@@ -188,8 +188,8 @@ class RiskCopilotDashboard:
                     company_list.append({
                         "Company": name,
                         "Ticker": info["ticker"],
-                        "Entries": info["entries"],
-                        "Years": ", ".join(info["years"]),
+                        "Entries": info.get("entries", 1),
+                        "Years": ", ".join(info.get("years", [])),
                         "Data Size": f"{info['total_chars']:,} chars"
                     })
                 
