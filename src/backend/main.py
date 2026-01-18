@@ -534,47 +534,55 @@ async def get_ai_capabilities():
 @app.post("/news/fetch")
 async def fetch_news(max_companies: int = 5):
     """
-    Fetch news (simplified version)
+    Fetch latest financial news for companies - FIXED VERSION
     """
     try:
-        # Sample news data
-        sample_news = {
-            "Apple Inc. (AAPL)": [
-                {
-                    "title": "Apple faces antitrust investigation over App Store practices",
-                    "sentiment": "negative",
-                    "risk_score": 75,
-                    "published": datetime.utcnow().isoformat()
+        from news.news_client import get_news_client
+        from news.news_integration import get_news_integration
+        
+        # Get news client
+        client = get_news_client()
+        
+        if not client.enabled:
+            return {
+                "status": "success",
+                "message": "News API not enabled. Using sample data.",
+                "news_data": {},
+                "analysis": {
+                    "total_articles": 3,
+                    "companies_with_news": 2,
+                    "average_risk_score": 55.0,
+                    "sentiment_distribution": {"positive": 1, "negative": 2, "neutral": 0},
+                    "high_risk_alerts": [
+                        {
+                            "company": "Apple Inc.",
+                            "title": "Sample: Antitrust investigation ongoing",
+                            "risk_score": 75
+                        }
+                    ]
                 },
-                {
-                    "title": "Apple reports record iPhone sales and service revenue growth",
-                    "sentiment": "positive", 
-                    "risk_score": 25,
-                    "published": datetime.utcnow().isoformat()
-                }
-            ],
-            "Microsoft Corp (MSFT)": [
-                {
-                    "title": "Microsoft Azure experiences minor security incident",
-                    "sentiment": "negative",
-                    "risk_score": 65,
-                    "published": datetime.utcnow().isoformat()
-                }
-            ]
-        }
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        
+        # Check if Redis client is available
+        if not redis_client:
+            logger.warning("Redis not available for news alerts")
+        
+        # Fetch real news
+        service = get_news_integration(redis_client=redis_client)
+        result = service.fetch_and_analyze_news(max_companies=max_companies)
         
         return {
             "status": "success",
-            "message": f"Fetched sample news for {min(max_companies, len(sample_news))} companies",
-            "news_data": {k: v for k, v in list(sample_news.items())[:max_companies]},
-            "analysis": {
-                "total_articles": sum(len(v) for v in sample_news.values()),
-                "companies_with_news": len(sample_news),
-                "average_risk_score": 55.0,
-                "sentiment_distribution": {"positive": 1, "negative": 2, "neutral": 0}
-            },
+            "message": f"Fetched real news for {result['analysis'].get('companies_with_news', 0)} companies",
+            "news_data": result.get("news_data", {}),
+            "analysis": result["analysis"],
             "timestamp": datetime.utcnow().isoformat()
         }
+        
+    except Exception as e:
+        logger.error(f"Error fetching news: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
         
     except Exception as e:
         logger.error(f"Error fetching news: {e}")
@@ -582,17 +590,36 @@ async def fetch_news(max_companies: int = 5):
 
 @app.get("/news/stats")
 async def get_news_stats():
-    """Get news API statistics"""
-    return {
-        "status": "success",
-        "news_api": {
-            "enabled": False,
-            "rate_limit_remaining": "N/A",
-            "mode": "sample_data",
-            "note": "Using sample news data. Add NEWSAPI_KEY to .env for real news."
-        },
-        "timestamp": datetime.utcnow().isoformat()
-    }
+    """Get news API statistics - FIXED VERSION"""
+    try:
+        from news.news_client import get_news_client
+        
+        client = get_news_client()
+        
+        return {
+            "status": "success",
+            "news_api": {
+                "enabled": client.enabled,
+                "rate_limit_remaining": client.rate_limit_remaining,
+                "mode": "real_api" if client.enabled else "sample_data",
+                "cache_directory": client.cache_dir,
+                "default_companies": [c["name"] for c in client.DEFAULT_COMPANIES[:5]]
+            },
+            "risk_keywords": client.RISK_KEYWORDS[:10],
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting news stats: {e}")
+        return {
+            "status": "error",
+            "news_api": {
+                "enabled": False,
+                "error": str(e),
+                "mode": "error"
+            },
+            "timestamp": datetime.utcnow().isoformat()
+        }
 
 @app.get("/news/latest")
 async def get_latest_news():
