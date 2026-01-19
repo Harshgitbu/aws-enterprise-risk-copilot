@@ -2,7 +2,7 @@
 Memory-optimized Gemini API client for AWS Risk Copilot
 WITH CIRCUIT BREAKER PROTECTION
 OPTIMIZED FOR: 1GB RAM, AWS t3.micro, Google Free Tier (10 RPM)
-Model: gemini-2.5-flash-lite (Your actual free tier allocation)
+Model: gemini-2.0-flash (Your actual free tier allocation)
 """
 
 import os
@@ -45,7 +45,7 @@ except ImportError:
     logger.warning("Could not import APIConfig, using environment variables directly")
     class CONFIG:
         GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
-        GEMINI_MODEL = "gemini-2.5-flash-lite"  # Your free tier model
+        GEMINI_MODEL = "gemini-2.0-flash"  # Your free tier model
         GEMINI_MAX_TOKENS = 2048  # Reduced for 1GB RAM
         GEMINI_RATE_LIMIT = 8  # Your free tier: 10 RPM, using 8 for safety
 

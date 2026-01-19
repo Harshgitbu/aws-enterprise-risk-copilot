@@ -29,8 +29,8 @@ class NewsIntegrationService:
     def load_news_client(self):
         """Lazy load news client"""
         if self.news_client is None:
-            from news.news_client import get_news_client
-            self.news_client = get_news_client()
+            from news.combined_client import get_combined_client
+            self.news_client = get_combined_client()
     
     def fetch_and_analyze_news(self, companies: List[Dict] = None, max_companies: int = 5) -> Dict[str, Any]:
         """
