@@ -639,3 +639,552 @@ async def get_latest_news():
         },
         "timestamp": datetime.utcnow().isoformat()
     }
+
+# ==================== REAL DATA ENDPOINTS ====================
+
+@app.get("/real/companies")
+async def get_real_companies():
+    """Get real company data from SEC"""
+    try:
+        # Try to import real fetcher
+        try:
+            from data.real_sec_fetcher import get_real_sec_fetcher
+            fetcher = get_real_sec_fetcher()
+            
+            companies = []
+            for ticker in list(fetcher.REAL_COMPANIES.keys())[:50]:  # Limit to 50 for performance
+                try:
+                    risk_data = fetcher.calculate_risk_score(ticker)
+                    companies.append({
+                        "ticker": ticker,
+                        "name": fetcher.REAL_COMPANIES[ticker]["name"],
+                        "sector": fetcher._get_sector(ticker),
+                        "risk_score": risk_data["risk_score"],
+                        "risk_level": risk_data["risk_level"],
+                        "data_source": risk_data.get("data_source", "estimated")
+                    })
+                except Exception as e:
+                    logger.warning(f"Error processing {ticker}: {e}")
+                    continue
+            
+            return {
+                "status": "success",
+                "message": f"Loaded {len(companies)} real companies",
+                "companies": companies,
+                "count": len(companies),
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            
+        except ImportError as e:
+            logger.warning(f"Real SEC fetcher not available: {e}")
+            # Fallback to sample data
+            return {
+                "status": "success",
+                "message": "Using sample company data (install real fetcher for SEC data)",
+                "companies": [
+                    {"ticker": "AAPL", "name": "Apple Inc.", "sector": "Technology", "risk_score": 72, "risk_level": "High"},
+                    {"ticker": "MSFT", "name": "Microsoft Corp", "sector": "Technology", "risk_score": 68, "risk_level": "Medium"},
+                    {"ticker": "AMZN", "name": "Amazon.com Inc.", "sector": "Consumer", "risk_score": 75, "risk_level": "High"},
+                    {"ticker": "GOOGL", "name": "Alphabet Inc.", "sector": "Technology", "risk_score": 65, "risk_level": "Medium"},
+                    {"ticker": "META", "name": "Meta Platforms Inc.", "sector": "Technology", "risk_score": 70, "risk_level": "High"},
+                    {"ticker": "NVDA", "name": "NVIDIA Corp", "sector": "Technology", "risk_score": 82, "risk_level": "High"},
+                    {"ticker": "TSLA", "name": "Tesla Inc.", "sector": "Consumer", "risk_score": 78, "risk_level": "High"},
+                    {"ticker": "JPM", "name": "JPMorgan Chase & Co", "sector": "Financial", "risk_score": 60, "risk_level": "Medium"},
+                    {"ticker": "JNJ", "name": "Johnson & Johnson", "sector": "Healthcare", "risk_score": 55, "risk_level": "Medium"},
+                    {"ticker": "V", "name": "Visa Inc.", "sector": "Financial", "risk_score": 58, "risk_level": "Medium"},
+                ],
+                "count": 10,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            
+    except Exception as e:
+        logger.error(f"Error getting real companies: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/real/search")
+async def search_real_companies(query: str = "", sector: str = "All"):
+    """Search real companies"""
+    try:
+        from data.real_sec_fetcher import get_real_sec_fetcher
+        
+        fetcher = get_real_sec_fetcher()
+        results = fetcher.search_companies(query, sector if sector != "All" else None)
+        
+        return {
+            "status": "success",
+            "query": query,
+            "sector": sector,
+            "results": results,
+            "count": len(results),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except ImportError as e:
+        logger.warning(f"Real SEC fetcher not available: {e}")
+        # Fallback search
+        sample_companies = [
+            {"ticker": "AAPL", "name": "Apple Inc.", "sector": "Technology", "risk_score": 72, "risk_level": "High"},
+            {"ticker": "MSFT", "name": "Microsoft Corp", "sector": "Technology", "risk_score": 68, "risk_level": "Medium"},
+            {"ticker": "AMZN", "name": "Amazon.com Inc.", "sector": "Consumer", "risk_score": 75, "risk_level": "High"},
+        ]
+        
+        # Filter by query
+        filtered = []
+        query_lower = query.lower()
+        for company in sample_companies:
+            if (not query or 
+                query_lower in company["name"].lower() or 
+                query_lower in company["ticker"].lower()):
+                if sector == "All" or sector == company["sector"]:
+                    filtered.append(company)
+        
+        return {
+            "status": "success",
+            "query": query,
+            "sector": sector,
+            "results": filtered,
+            "count": len(filtered),
+            "note": "Using sample data (install real fetcher for SEC search)",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error searching real companies: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/real/company/{ticker}")
+async def get_company_details(ticker: str):
+    """Get detailed company information"""
+    try:
+        from data.real_sec_fetcher import get_real_sec_fetcher
+        
+        fetcher = get_real_sec_fetcher()
+        
+        # Get company info
+        if ticker.upper() not in fetcher.REAL_COMPANIES:
+            raise HTTPException(status_code=404, detail=f"Company {ticker} not found")
+        
+        # Calculate risk score
+        risk_data = fetcher.calculate_risk_score(ticker.upper())
+        
+        # Get risk factors
+        risk_factors = fetcher.extract_risk_factors(ticker.upper())
+        
+        # Get recent filings
+        recent_filings = fetcher.get_recent_filings(ticker.upper(), "10-K", 3)
+        
+        return {
+            "status": "success",
+            "ticker": ticker.upper(),
+            "name": fetcher.REAL_COMPANIES[ticker.upper()]["name"],
+            "cik": fetcher.REAL_COMPANIES[ticker.upper()]["cik"],
+            "sector": fetcher._get_sector(ticker.upper()),
+            "risk_score": risk_data["risk_score"],
+            "risk_level": risk_data["risk_level"],
+            "risk_factors": risk_factors,
+            "recent_filings": recent_filings,
+            "data_source": risk_data.get("data_source", "estimated"),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except ImportError as e:
+        logger.warning(f"Real SEC fetcher not available: {e}")
+        # Sample company details
+        sample_details = {
+            "AAPL": {
+                "name": "Apple Inc.",
+                "sector": "Technology",
+                "risk_score": 72,
+                "risk_level": "High",
+                "risk_factors": {
+                    "cybersecurity": "Data breaches, unauthorized access",
+                    "supply_chain": "Manufacturing dependencies",
+                    "regulatory": "Antitrust investigations"
+                }
+            },
+            "MSFT": {
+                "name": "Microsoft Corp",
+                "sector": "Technology",
+                "risk_score": 68,
+                "risk_level": "Medium",
+                "risk_factors": {
+                    "cloud_security": "Azure vulnerabilities",
+                    "regulatory": "Antitrust scrutiny",
+                    "competition": "AWS competition"
+                }
+            },
+            "AMZN": {
+                "name": "Amazon.com Inc.",
+                "sector": "Consumer",
+                "risk_score": 75,
+                "risk_level": "High",
+                "risk_factors": {
+                    "regulatory": "FTC investigations",
+                    "labor": "Unionization efforts",
+                    "competition": "Market competition"
+                }
+            }
+        }
+        
+        if ticker.upper() in sample_details:
+            return {
+                "status": "success",
+                "ticker": ticker.upper(),
+                **sample_details[ticker.upper()],
+                "note": "Sample data (install real fetcher for SEC details)",
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        else:
+            raise HTTPException(status_code=404, detail=f"Company {ticker} not found")
+            
+    except Exception as e:
+        logger.error(f"Error getting company details: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==================== SMART SEARCH ENDPOINTS ====================
+
+@app.get("/search/companies")
+async def search_companies(query: str = "", sector: str = "", limit: int = 20):
+    """
+    Smart search for companies with fuzzy matching
+    
+    Args:
+        query: Search query (can be name, ticker, partial name)
+        sector: Filter by sector
+        limit: Maximum results
+    """
+    try:
+        # Sample company database (in production, this would be from a real DB)
+        companies_db = [
+            {"name": "Apple Inc.", "ticker": "AAPL", "sector": "Technology", "aliases": ["Apple", "AAPL", "iPhone"]},
+            {"name": "Microsoft Corp", "ticker": "MSFT", "sector": "Technology", "aliases": ["Microsoft", "MSFT", "Azure"]},
+            {"name": "Amazon.com Inc.", "ticker": "AMZN", "sector": "Consumer", "aliases": ["Amazon", "AMZN", "AWS"]},
+            {"name": "Google (Alphabet)", "ticker": "GOOGL", "sector": "Technology", "aliases": ["Google", "GOOGL", "Alphabet"]},
+            {"name": "Meta Platforms", "ticker": "META", "sector": "Technology", "aliases": ["Meta", "META", "Facebook"]},
+            {"name": "Tesla Inc.", "ticker": "TSLA", "sector": "Consumer", "aliases": ["Tesla", "TSLA", "Electric"]},
+            {"name": "NVIDIA Corp", "ticker": "NVDA", "sector": "Technology", "aliases": ["NVIDIA", "NVDA", "GPU"]},
+            {"name": "JPMorgan Chase", "ticker": "JPM", "sector": "Financial", "aliases": ["JPMorgan", "JPM", "Chase"]},
+            {"name": "Johnson & Johnson", "ticker": "JNJ", "sector": "Healthcare", "aliases": ["Johnson", "JNJ"]},
+            {"name": "Visa Inc.", "ticker": "V", "sector": "Financial", "aliases": ["Visa", "V"]},
+        ]
+        
+        query_lower = query.lower().strip()
+        sector_lower = sector.lower() if sector else ""
+        
+        results = []
+        
+        for company in companies_db:
+            # Check sector filter
+            if sector_lower and sector_lower not in company["sector"].lower():
+                continue
+            
+            # Check if query matches
+            matches = False
+            match_score = 0
+            
+            # Check name
+            if query_lower in company["name"].lower():
+                matches = True
+                match_score += 10
+            
+            # Check ticker
+            if query_lower == company["ticker"].lower():
+                matches = True
+                match_score += 20
+            
+            # Check aliases
+            for alias in company.get("aliases", []):
+                if query_lower in alias.lower():
+                    matches = True
+                    match_score += 5
+            
+            # Fuzzy matching for partial names
+            if not matches and query_lower:
+                # Simple fuzzy match: check if query is substring of name or vice versa
+                if (query_lower in company["name"].lower() or 
+                    any(query_lower in alias.lower() for alias in company.get("aliases", []))):
+                    matches = True
+                    match_score += 2
+            
+            # If no query provided, include all companies
+            if not query_lower:
+                matches = True
+                match_score = 1
+            
+            if matches:
+                # Get risk data (simulated for now)
+                risk_score = 50 + hash(company["ticker"]) % 30  # Simulated risk score
+                
+                results.append({
+                    "name": company["name"],
+                    "ticker": company["ticker"],
+                    "sector": company["sector"],
+                    "risk_score": risk_score,
+                    "risk_level": "HIGH" if risk_score > 70 else "MEDIUM" if risk_score > 40 else "LOW",
+                    "match_score": match_score,
+                    "aliases": company.get("aliases", [])
+                })
+        
+        # Sort by match score
+        results.sort(key=lambda x: x["match_score"], reverse=True)
+        
+        return {
+            "status": "success",
+            "query": query,
+            "sector_filter": sector,
+            "results": results[:limit],
+            "count": len(results[:limit]),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error searching companies: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/search/autocomplete")
+async def autocomplete_companies(query: str = "", limit: int = 10):
+    """
+    Autocomplete for company search
+    
+    Args:
+        query: Partial company name or ticker
+        limit: Maximum suggestions
+    """
+    try:
+        companies_db = [
+            {"name": "Apple Inc.", "ticker": "AAPL", "sector": "Technology"},
+            {"name": "Microsoft Corp", "ticker": "MSFT", "sector": "Technology"},
+            {"name": "Amazon.com Inc.", "ticker": "AMZN", "sector": "Consumer"},
+            {"name": "Google (Alphabet)", "ticker": "GOOGL", "sector": "Technology"},
+            {"name": "Meta Platforms", "ticker": "META", "sector": "Technology"},
+            {"name": "Tesla Inc.", "ticker": "TSLA", "sector": "Consumer"},
+            {"name": "NVIDIA Corp", "ticker": "NVDA", "sector": "Technology"},
+            {"name": "JPMorgan Chase", "ticker": "JPM", "sector": "Financial"},
+            {"name": "Johnson & Johnson", "ticker": "JNJ", "sector": "Healthcare"},
+            {"name": "Visa Inc.", "ticker": "V", "sector": "Financial"},
+        ]
+        
+        query_lower = query.lower().strip()
+        suggestions = []
+        
+        for company in companies_db:
+            if (query_lower in company["name"].lower() or 
+                query_lower in company["ticker"].lower() or
+                not query_lower):  # Return all if no query
+                
+                suggestions.append({
+                    "label": f"{company['name']} ({company['ticker']}) - {company['sector']}",
+                    "value": company["ticker"],
+                    "name": company["name"],
+                    "ticker": company["ticker"]
+                })
+        
+        return {
+            "status": "success",
+            "query": query,
+            "suggestions": suggestions[:limit],
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in autocomplete: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==================== SMART SEARCH ENDPOINTS ====================
+
+@app.get("/search/companies")
+async def search_companies(query: str = "", sector: str = "", limit: int = 20):
+    """Smart search for companies with fuzzy matching"""
+    try:
+        companies_db = [
+            {"name": "Apple Inc.", "ticker": "AAPL", "sector": "Technology", "aliases": ["Apple", "AAPL", "iPhone"]},
+            {"name": "Microsoft Corp", "ticker": "MSFT", "sector": "Technology", "aliases": ["Microsoft", "MSFT", "Azure"]},
+            {"name": "Amazon.com Inc.", "ticker": "AMZN", "sector": "Consumer", "aliases": ["Amazon", "AMZN", "AWS"]},
+            {"name": "Google (Alphabet)", "ticker": "GOOGL", "sector": "Technology", "aliases": ["Google", "GOOGL", "Alphabet"]},
+            {"name": "Meta Platforms", "ticker": "META", "sector": "Technology", "aliases": ["Meta", "META", "Facebook"]},
+            {"name": "Tesla Inc.", "ticker": "TSLA", "sector": "Consumer", "aliases": ["Tesla", "TSLA", "Electric"]},
+            {"name": "NVIDIA Corp", "ticker": "NVDA", "sector": "Technology", "aliases": ["NVIDIA", "NVDA", "GPU"]},
+            {"name": "JPMorgan Chase", "ticker": "JPM", "sector": "Financial", "aliases": ["JPMorgan", "JPM", "Chase"]},
+            {"name": "Johnson & Johnson", "ticker": "JNJ", "sector": "Healthcare", "aliases": ["Johnson", "JNJ"]},
+            {"name": "Visa Inc.", "ticker": "V", "sector": "Financial", "aliases": ["Visa", "V"]},
+        ]
+        
+        query_lower = query.lower().strip()
+        sector_lower = sector.lower() if sector else ""
+        
+        results = []
+        
+        for company in companies_db:
+            if sector_lower and sector_lower not in company["sector"].lower():
+                continue
+            
+            matches = False
+            match_score = 0
+            
+            # Check name
+            if query_lower in company["name"].lower():
+                matches = True
+                match_score += 10
+            
+            # Check ticker
+            if query_lower == company["ticker"].lower():
+                matches = True
+                match_score += 20
+            
+            # Check aliases
+            for alias in company.get("aliases", []):
+                if query_lower in alias.lower():
+                    matches = True
+                    match_score += 5
+            
+            # Fuzzy matching
+            if not matches and query_lower:
+                if (query_lower in company["name"].lower() or 
+                    any(query_lower in alias.lower() for alias in company.get("aliases", []))):
+                    matches = True
+                    match_score += 2
+            
+            if not query_lower:
+                matches = True
+                match_score = 1
+            
+            if matches:
+                risk_score = 50 + hash(company["ticker"]) % 30
+                
+                results.append({
+                    "name": company["name"],
+                    "ticker": company["ticker"],
+                    "sector": company["sector"],
+                    "risk_score": risk_score,
+                    "risk_level": "HIGH" if risk_score > 70 else "MEDIUM" if risk_score > 40 else "LOW",
+                    "match_score": match_score,
+                    "aliases": company.get("aliases", [])
+                })
+        
+        results.sort(key=lambda x: x["match_score"], reverse=True)
+        
+        return {
+            "status": "success",
+            "query": query,
+            "sector_filter": sector,
+            "results": results[:limit],
+            "count": len(results[:limit]),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error searching companies: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/search/autocomplete")
+async def autocomplete_companies(query: str = "", limit: int = 10):
+    """Autocomplete for company search"""
+    try:
+        companies_db = [
+            {"name": "Apple Inc.", "ticker": "AAPL", "sector": "Technology"},
+            {"name": "Microsoft Corp", "ticker": "MSFT", "sector": "Technology"},
+            {"name": "Amazon.com Inc.", "ticker": "AMZN", "sector": "Consumer"},
+            {"name": "Google (Alphabet)", "ticker": "GOOGL", "sector": "Technology"},
+            {"name": "Meta Platforms", "ticker": "META", "sector": "Technology"},
+            {"name": "Tesla Inc.", "ticker": "TSLA", "sector": "Consumer"},
+            {"name": "NVIDIA Corp", "ticker": "NVDA", "sector": "Technology"},
+            {"name": "JPMorgan Chase", "ticker": "JPM", "sector": "Financial"},
+            {"name": "Johnson & Johnson", "ticker": "JNJ", "sector": "Healthcare"},
+            {"name": "Visa Inc.", "ticker": "V", "sector": "Financial"},
+        ]
+        
+        query_lower = query.lower().strip()
+        suggestions = []
+        
+        for company in companies_db:
+            if (query_lower in company["name"].lower() or 
+                query_lower in company["ticker"].lower() or
+                not query_lower):
+                
+                suggestions.append({
+                    "label": f"{company['name']} ({company['ticker']}) - {company['sector']}",
+                    "value": company["ticker"],
+                    "name": company["name"],
+                    "ticker": company["ticker"]
+                })
+        
+        return {
+            "status": "success",
+            "query": query,
+            "suggestions": suggestions[:limit],
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in autocomplete: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==================== SMART SEARCH ENDPOINT ====================
+
+@app.get("/search/companies")
+async def search_companies(query: str = "", sector: str = "", limit: int = 20):
+    """
+    Smart company search with fuzzy matching
+    """
+    try:
+        # Sample company database with fuzzy matching
+        companies_db = [
+            {"name": "Apple Inc.", "ticker": "AAPL", "aliases": ["apple", "aapl", "iphone", "ipad", "mac"]},
+            {"name": "Microsoft Corporation", "ticker": "MSFT", "aliases": ["microsoft", "msft", "windows", "azure", "xbox"]},
+            {"name": "Amazon.com Inc.", "ticker": "AMZN", "aliases": ["amazon", "amzn", "aws", "jeff bezos"]},
+            {"name": "Alphabet Inc.", "ticker": "GOOGL", "aliases": ["google", "googl", "alphabet", "search", "youtube"]},
+            {"name": "Meta Platforms Inc.", "ticker": "META", "aliases": ["meta", "facebook", "instagram", "whatsapp"]},
+            {"name": "Tesla Inc.", "ticker": "TSLA", "aliases": ["tesla", "tsla", "elon musk", "electric car"]},
+            {"name": "NVIDIA Corporation", "ticker": "NVDA", "aliases": ["nvidia", "nvda", "gpu", "ai chips"]},
+            {"name": "JPMorgan Chase & Co.", "ticker": "JPM", "aliases": ["jpmorgan", "jpm", "chase", "bank"]},
+            {"name": "Johnson & Johnson", "ticker": "JNJ", "aliases": ["johnson", "jnj", "pharma", "healthcare"]},
+            {"name": "Visa Inc.", "ticker": "V", "aliases": ["visa", "credit card", "payment"]},
+        ]
+        
+        query_lower = query.lower().strip()
+        results = []
+        
+        for company in companies_db:
+            score = 0
+            
+            # Exact ticker match
+            if company["ticker"].lower() == query_lower:
+                score += 100
+            
+            # Exact name match
+            if company["name"].lower() == query_lower:
+                score += 90
+            
+            # Partial name match
+            if query_lower in company["name"].lower():
+                score += 80
+            
+            # Alias match
+            for alias in company["aliases"]:
+                if query_lower == alias.lower():
+                    score += 70
+                elif query_lower in alias.lower() or alias.lower() in query_lower:
+                    score += 50
+            
+            # Add to results if score > 0
+            if score > 0:
+                results.append({
+                    **company,
+                    "search_score": score,
+                    "match_type": "exact" if score >= 90 else "partial" if score >= 50 else "fuzzy"
+                })
+        
+        # Sort by score
+        results.sort(key=lambda x: x["search_score"], reverse=True)
+        
+        return {
+            "status": "success",
+            "query": query,
+            "results": results[:limit],
+            "count": len(results),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in company search: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

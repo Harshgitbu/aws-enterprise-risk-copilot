@@ -46,3 +46,7 @@ plotly
 pandas
 vaderSentiment
 textblob
+fuzzywuzzy
+python-Levenshtein
+requests
+finnhub-python

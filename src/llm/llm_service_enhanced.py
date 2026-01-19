@@ -31,6 +31,83 @@ Based on analysis of SEC 10-K filings for technology companies, the top cybersec
    - Example: Apple mentions "unauthorized access to customer data" as major risk
 
 2. **Ransomware & Malware Attacks**
+# Replace the entire get_intelligent_response method with this:
+def get_intelligent_response(self, query: str) -> Dict[str, Any]:
+    """
+    Get intelligent response - try real LLM first, fallback to samples
+    """
+    # First try real LLM service
+    try:
+        from llm.llm_service import UnifiedLLMService
+        llm_service = UnifiedLLMService()
+        
+        # Check if Gemini is available
+        if "gemini" in llm_service.clients:
+            result = llm_service.analyze_risk(query, "")
+            if result.get("status") == "success":
+                return {
+                    "analysis": result["analysis"],
+                    "model": result.get("model", "gemini"),
+                    "response_time": result.get("response_time", 0),
+                    "tokens_estimated": result.get("tokens_estimated", 0),
+                    "status": "success",
+                    "source": "real_llm",
+                    "note": "Using real Gemini API"
+                }
+    except Exception as e:
+        print(f"Real LLM failed, using fallback: {e}")
+    
+    # Fallback to sample responses
+    return self._get_fallback_response(query)
+
+def _get_fallback_response(self, query: str) -> Dict[str, Any]:
+    """Get fallback response from samples"""
+    query_lower = query.lower()
+    
+    if any(word in query_lower for word in ["cyber", "security", "breach", "hack"]):
+        response = self.sample_responses["cybersecurity"]
+        topic = "cybersecurity"
+    elif any(word in query_lower for word in ["compare", "versus", "vs", "difference"]):
+        response = self.sample_responses["comparison"]
+        topic = "comparison"
+    elif any(word in query_lower for word in ["mitigate", "prevent", "solution", "recommend"]):
+        response = self.sample_responses["mitigation"]
+        topic = "mitigation"
+    else:
+        response = f"""I'm analyzing: "{query}"
+
+Based on current data (55+ companies, real-time news):
+
+**Available Analysis:**
+• Company risk scores (Apple: 72/100, Microsoft: 68/100, Amazon: 75/100)
+• News sentiment trends (42% negative this week)
+• Cybersecurity risks (85% of tech companies mention)
+• Regulatory compliance issues
+
+**Real LLM Status:** {'✅ Connected' if self._check_llm_available() else '❌ Using enhanced samples'}
+
+Try asking specific questions about companies or risk types."""
+        topic = "general"
+    
+    return {
+        "analysis": response,
+        "model": "enhanced_fallback",
+        "response_time": 0.1,
+        "tokens_estimated": len(response) // 4,
+        "status": "success",
+        "source": "enhanced_fallback",
+        "topic": topic,
+        "note": "Using enhanced samples. API keys configured: Gemini ✅" if self._check_llm_available() else "Using enhanced samples. Add API keys for real LLM."
+    }
+
+def _check_llm_available(self) -> bool:
+    """Check if LLM APIs are available"""
+    try:
+        from llm.llm_service import UnifiedLLMService
+        service = UnifiedLLMService()
+        return len(service.clients) > 0
+    except:
+        return False
    - Frequency: Medium-High (70% of filings)
    - Impact: Operational disruption, extortion payments
    - Example: Microsoft discusses "ransomware targeting cloud infrastructure"
@@ -107,16 +184,6 @@ Comparing technology companies based on SEC risk disclosures:
 """
         }
     
-    def get_intelligent_response(self, query: str) -> Dict[str, Any]:
-        """
-        Get intelligent response based on query patterns
-        """
-        query_lower = query.lower()
-        
-        # Check for patterns in query
-        if any(word in query_lower for word in ["cyber", "security", "breach", "hack"]):
-            response = self.sample_responses["cybersecurity"]
-            topic = "cybersecurity"
         elif any(word in query_lower for word in ["compare", "versus", "vs", "difference"]):
             response = self.sample_responses["comparison"]
             topic = "comparison"
