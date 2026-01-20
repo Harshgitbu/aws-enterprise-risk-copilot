@@ -1,52 +1,21 @@
-# Core dependencies
+# Core (MUST HAVE)
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
-streamlit==1.29.0
+streamlit==1.28.1
+requests==2.31.0
+python-dotenv==1.0.0
 
-# Database & Cache
-redis==5.0.1
-psycopg2-binary==2.9.9
-faiss-cpu==1.7.4
-
-# ML & AI
-sentence-transformers==2.2.2
-torch==2.1.2
-transformers==4.36.2
+# AI/ML (Lightweight)
 google-generativeai==0.3.2
-huggingface-hub==0.20.1
+sentence-transformers==2.2.2
 
-# Data processing
+# Data (Lightweight)
 pandas==2.1.4
 numpy==1.24.3
-scikit-learn==1.3.2
-
-# Web & API
-requests==2.31.0
-httpx==0.25.2
-aiohttp==3.9.1
-python-multipart==0.0.6
+plotly==5.18.0
 
 # Utilities
-python-dotenv==1.0.0
 psutil==5.9.6
-pydantic==2.5.1
-python-dateutil==2.8.2
-tqdm==4.66.1
 
-# Monitoring & Logging
-prometheus-client==0.19.0
-structlog==23.2.0
-
-# Note: gzip is built into Python standard library
-# Note: newsapi-python is not available on some Python versions
-transformers
-torch
-sentencepiece
-plotly
-pandas
-vaderSentiment
-textblob
-fuzzywuzzy
-python-Levenshtein
-requests
-finnhub-python
+# Database
+redis==5.0.1

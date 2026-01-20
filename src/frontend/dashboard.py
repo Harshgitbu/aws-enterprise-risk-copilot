@@ -1,6 +1,6 @@
 """
-AWS Risk Copilot - Fixed Professional Dashboard
-Working version with all bugs fixed
+AWS Risk Copilot - Professional Dashboard
+Fixed and working version
 """
 
 import streamlit as st
@@ -121,7 +121,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 class WorkingRiskDashboard:
-    """Working Risk Dashboard - Simplified and Fixed"""
+    """Working Risk Dashboard - Fixed Version"""
     
     def __init__(self, backend_url: str = None):
         self.backend_url = backend_url or BACKEND_URL
@@ -285,7 +285,7 @@ class WorkingRiskDashboard:
             """, unsafe_allow_html=True)
     
     def display_ai_copilot(self):
-        """Display AI Copilot - SIMPLIFIED AND WORKING"""
+        """Display AI Copilot - FIXED"""
         st.markdown("## 🤖 AI Risk Copilot")
         
         # Initialize conversation
@@ -294,72 +294,30 @@ class WorkingRiskDashboard:
                 {"role": "ai", "message": "Hello! I'm your AI Risk Copilot. I can analyze company risks, compare businesses, and provide actionable insights. What would you like to know?"}
             ]
         
-        # Display conversation in a container
-        chat_container = st.container()
+        # Display conversation
+        for message in st.session_state.ai_conversation:
+            if message["role"] == "ai":
+                with st.chat_message("assistant"):
+                    st.markdown(message["message"])
+            else:
+                with st.chat_message("user"):
+                    st.markdown(message["message"])
         
-        with chat_container:
-            for message in st.session_state.ai_conversation:
-                if message["role"] == "ai":
-                    with st.chat_message("assistant"):
-                        st.markdown(message["message"])
-                else:
-                    with st.chat_message("user"):
-                        st.markdown(message["message"])
-        
-        # Example queries - placed BEFORE chat_input
-        st.markdown("**💡 Try asking:**")
-        
-        examples = [
-            "What are Apple's main risks?",
-            "Compare Tesla and Amazon", 
-            "Latest news risks for Microsoft",
-            "How to mitigate cybersecurity risks?"
-        ]
-        
-        cols = st.columns(2)
-        for idx, example in enumerate(examples):
-            with cols[idx % 2]:
-                if st.button(example, use_container_width=True, key=f"ex_{idx}"):
-                    # Store the example to use in chat input
-                    if 'pending_chat_input' not in st.session_state:
-                        st.session_state.pending_chat_input = example
-                    else:
-                        st.session_state.pending_chat_input = example
-                    st.rerun()
-        
-        # Clear conversation button
-        if st.button("🗑️ Clear Conversation", use_container_width=True):
-            st.session_state.ai_conversation = [
-                {"role": "ai", "message": "Conversation cleared. How can I help you?"}
-            ]
-            if 'pending_chat_input' in st.session_state:
-                del st.session_state.pending_chat_input
-            st.rerun()
-        
+        # Chat input - SIMPLIFIED
         st.markdown("---")
         
-        # Chat input - MUST BE AT THE BOTTOM, NOT INSIDE ANY CONTAINER
-        # Handle pending chat input from example buttons
-        default_text = ""
-        if 'pending_chat_input' in st.session_state and st.session_state.pending_chat_input:
-            default_text = st.session_state.pending_chat_input
-            # Clear it after using
-            del st.session_state.pending_chat_input
-        
-        # Create a unique key for chat input
-        chat_input_key = f"chat_input_{len(st.session_state.ai_conversation)}"
-        
+        # Create a text input and button instead of chat_input
         user_input = st.text_input(
             "Ask me anything about company risks...",
-            value=default_text,
-            key=chat_input_key,
-            label_visibility="collapsed",
+            key="ai_input",
             placeholder="Type your question here..."
         )
         
-        send_button = st.button("Send", use_container_width=True, type="primary")
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            send_button = st.button("Send", use_container_width=True, type="primary")
         
-        if (send_button and user_input) or (default_text and user_input):
+        if send_button and user_input:
             # Add user message
             st.session_state.ai_conversation.append({"role": "user", "message": user_input})
             
@@ -383,11 +341,36 @@ class WorkingRiskDashboard:
                 # Add AI response to conversation
                 st.session_state.ai_conversation.append({"role": "ai", "message": response})
             
-            # Rerun to show the new messages
+            st.rerun()
+        
+        # Example queries
+        st.markdown("---")
+        st.markdown("**💡 Try asking:**")
+        
+        examples = [
+            "What are Apple's main risks?",
+            "Compare Tesla and Amazon",
+            "Latest news risks for Microsoft",
+            "How to mitigate cybersecurity risks?"
+        ]
+        
+        cols = st.columns(2)
+        for idx, example in enumerate(examples):
+            with cols[idx % 2]:
+                if st.button(example, use_container_width=True, key=f"ex_{idx}"):
+                    # Set the input field value
+                    st.session_state.ai_input = example
+                    st.rerun()
+        
+        # Clear conversation button
+        if st.button("🗑️ Clear Conversation", use_container_width=True):
+            st.session_state.ai_conversation = [
+                {"role": "ai", "message": "Conversation cleared. How can I help you?"}
+            ]
             st.rerun()
     
     def display_companies(self):
-        """Display Companies Explorer - SIMPLIFIED"""
+        """Display Companies Explorer"""
         st.markdown("## 🏢 Company Explorer")
         
         # Search box
@@ -422,37 +405,38 @@ class WorkingRiskDashboard:
                         st.dataframe(df, use_container_width=True)
                         
                         # Show details for selected company
-                        selected_company = st.selectbox(
-                            "Select a company for detailed analysis",
-                            [f"{row['Company']} ({row['Ticker']})" for row in df_data]
-                        )
-                        
-                        if selected_company and st.button("Analyze Selected Company"):
-                            # Extract ticker from selection
-                            ticker = selected_company.split("(")[-1].replace(")", "").strip()
+                        if len(df_data) > 0:
+                            selected_company = st.selectbox(
+                                "Select a company for detailed analysis",
+                                [f"{row['Company']} ({row['Ticker']})" for row in df_data]
+                            )
                             
-                            with st.spinner(f"Analyzing {ticker}..."):
-                                # Get company details
-                                details = self.make_request(f"/real/company/{ticker}")
+                            if selected_company and st.button("Analyze Selected Company"):
+                                # Extract ticker from selection
+                                ticker = selected_company.split("(")[-1].replace(")", "").strip()
                                 
-                                if details and details.get("status") == "success":
-                                    st.markdown(f"### 📊 {details.get('name')} Analysis")
+                                with st.spinner(f"Analyzing {ticker}..."):
+                                    # Get company details
+                                    details = self.make_request(f"/real/company/{ticker}")
                                     
-                                    col1, col2, col3 = st.columns(3)
-                                    with col1:
-                                        st.metric("Risk Score", f"{details.get('risk_score', 0)}/100")
-                                    with col2:
-                                        st.metric("Risk Level", details.get("risk_level", "N/A"))
-                                    with col3:
-                                        st.metric("Sector", details.get("sector", "N/A"))
-                                    
-                                    # Risk factors
-                                    risk_factors = details.get("risk_factors", {})
-                                    if risk_factors:
-                                        st.markdown("#### 🔍 Risk Factors")
-                                        for factor, desc in risk_factors.items():
-                                            with st.expander(f"{factor.replace('_', ' ').title()}"):
-                                                st.write(desc)
+                                    if details and details.get("status") == "success":
+                                        st.markdown(f"### 📊 {details.get('name')} Analysis")
+                                        
+                                        col1, col2, col3 = st.columns(3)
+                                        with col1:
+                                            st.metric("Risk Score", f"{details.get('risk_score', 0)}/100")
+                                        with col2:
+                                            st.metric("Risk Level", details.get("risk_level", "N/A"))
+                                        with col3:
+                                            st.metric("Sector", details.get("sector", "N/A"))
+                                        
+                                        # Risk factors
+                                        risk_factors = details.get("risk_factors", {})
+                                        if risk_factors:
+                                            st.markdown("#### 🔍 Risk Factors")
+                                            for factor, desc in risk_factors.items():
+                                                with st.expander(f"{factor.replace('_', ' ').title()}"):
+                                                    st.write(desc)
                 else:
                     st.warning("No companies found. Try: apple, google, microsoft, amazon, tesla")
         else:
@@ -467,11 +451,12 @@ class WorkingRiskDashboard:
             for idx, ticker in enumerate(popular):
                 with cols[idx % 4]:
                     if st.button(ticker, use_container_width=True, key=f"pop_{ticker}"):
-                        st.session_state.quick_company = ticker
+                        # Set search query
+                        st.session_state.company_search = ticker
                         st.rerun()
     
     def display_risk_analysis(self):
-        """Display Risk Analysis - SIMPLIFIED"""
+        """Display Risk Analysis"""
         st.markdown("## 📈 Risk Analysis")
         
         tab1, tab2, tab3 = st.tabs(["Single Company", "Compare Companies", "Sector Analysis"])
@@ -572,7 +557,7 @@ class WorkingRiskDashboard:
                         st.markdown(analysis)
     
     def display_news(self):
-        """Display News Monitor - SIMPLIFIED"""
+        """Display News Monitor"""
         st.markdown("## 📰 News Monitor")
         
         col1, col2 = st.columns([2, 1])
@@ -637,7 +622,7 @@ class WorkingRiskDashboard:
                 st.write(f"**Rate Limit:** {news_api.get('rate_limit_remaining')} requests remaining")
     
     def display_system(self):
-        """Display System Health - SIMPLIFIED"""
+        """Display System Health"""
         st.markdown("## ⚙️ System Health")
         
         # System Status
@@ -754,25 +739,32 @@ class WorkingRiskDashboard:
 
 def main():
     """Main entry point"""
-    # Check backend connectivity
+    # Priority order for backend URLs
     backend_urls = [
-        "http://backend:8000",
-        "http://localhost:8000", 
-        "http://54.88.98.50:8000"
+        os.getenv("BACKEND_URL"),  # Render environment variable
+        "http://backend:8000",      # Docker Compose
+        "http://localhost:8000",    # Local development
+        "https://risk-copilot-backend.onrender.com",  # Render production
+        "http://54.88.98.50:8000"   # EC2 fallback
     ]
     
     backend_url = None
     for url in backend_urls:
-        try:
-            response = requests.get(f"{url}/health", timeout=5)
-            if response.status_code == 200:
-                backend_url = url
-                break
-        except:
-            continue
+        if url:
+            try:
+                response = requests.get(f"{url}/health", timeout=5)
+                if response.status_code == 200:
+                    backend_url = url
+                    print(f"✅ Connected to backend at {url}")
+                    break
+            except Exception as e:
+                print(f"❌ Failed to connect to {url}: {e}")
+                continue
     
     if not backend_url:
-        backend_url = "http://54.88.98.50:8000"
+        # Default to local
+        backend_url = "http://localhost:8000"
+        print(f"⚠️  Using default backend: {backend_url}")
     
     # Initialize and run dashboard
     dashboard = WorkingRiskDashboard(backend_url)

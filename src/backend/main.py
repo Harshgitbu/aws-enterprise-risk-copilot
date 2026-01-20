@@ -31,6 +31,7 @@ except ImportError as e:
     logger.warning(f"Redis import error: {e}")
 
 # Initialize Redis client
+# Initialize Redis client
 redis_client = None
 
 @asynccontextmanager
@@ -38,19 +39,34 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown events"""
     # Startup
     global redis_client
-    if REDIS_AVAILABLE:
-        try:
+    try:
+        # Check for Render-style Redis URL
+        redis_url = os.getenv("REDIS_URL")
+        if redis_url:
+            # Render provides full Redis URL
+            import redis as redis_lib
+            print(f"Connecting to Redis at: {redis_url}")
+            redis_client = redis_lib.from_url(redis_url, decode_responses=True)
+            # Test connection
+            redis_client.ping()
+            print("✅ Redis client initialized successfully (Render)")
+        else:
+            # Fallback to Docker Compose configuration
+            from backend.redis_cache import get_redis_client
             redis_client = await get_redis_client()
-            print("✅ Redis client initialized successfully")
-        except Exception as e:
-            print(f"⚠️  Redis connection failed: {e}")
-            redis_client = None
+            print("✅ Redis client initialized successfully (Docker)")
+    except Exception as e:
+        print(f"⚠️  Redis connection failed: {e}")
+        redis_client = None
     
     yield
     
     # Shutdown
     if redis_client:
-        await redis_client.close()
+        try:
+            redis_client.close()
+        except:
+            pass
 
 app = FastAPI(
     title="AWS Enterprise Risk Copilot",
