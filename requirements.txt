@@ -1,21 +1,26 @@
-# Core (MUST HAVE)
+# Core framework
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 streamlit==1.28.1
-requests==2.31.0
-python-dotenv==1.0.0
 
-# AI/ML (Lightweight)
-google-generativeai==0.3.2
+# Database & Cache
+redis==5.0.1
+
+# AI/ML (lightweight versions)
 sentence-transformers==2.2.2
+google-generativeai==0.3.2
+faiss-cpu==1.7.4
 
-# Data (Lightweight)
+# Data processing
 pandas==2.1.4
 numpy==1.24.3
 plotly==5.18.0
 
-# Utilities
+# Web & API
+requests==2.31.0
+python-dotenv==1.0.0
 psutil==5.9.6
 
-# Database
-redis==5.0.1
+# Utilities
+pydantic==2.5.1
+python-dateutil==2.8.2
