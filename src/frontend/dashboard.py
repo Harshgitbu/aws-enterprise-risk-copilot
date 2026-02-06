@@ -1,6 +1,6 @@
 """
 AWS Risk Copilot - Professional Dashboard
-Fixed and working version with updated connection logic
+Fixed and working version
 """
 
 import streamlit as st
@@ -19,7 +19,7 @@ from typing import Dict, List, Any, Optional
 # Add the src directory to Python path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-# Configuration - Will be detected dynamically
+# Configuration
 BACKEND_URL = os.getenv('BACKEND_URL', 'http://backend:8000')
 API_TIMEOUT = 10
 
@@ -495,7 +495,7 @@ class WorkingRiskDashboard:
                 "Select 2-3 companies to compare",
                 ["AAPL", "MSFT", "AMZN", "GOOGL", "TSLA", "META", "NVDA"],
                 default=["AAPL", "MSFT", "AMZN"]
-            ]
+            )
             
             if len(selected_companies) >= 2:
                 if st.button("Compare", use_container_width=True):
