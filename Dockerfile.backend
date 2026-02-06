@@ -4,35 +4,35 @@ WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
+    curl \
     gcc \
     g++ \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better caching
+# Copy requirements
 COPY requirements.txt .
 
-# Upgrade pip and install dependencies with retry logic
+# Install torch CPU FIRST
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt || \
-    (echo "First install failed, retrying..." && pip install --no-cache-dir -r requirements.txt)
+    pip install --no-cache-dir \
+    torch==2.1.0 --index-url https://download.pytorch.org/whl/cpu
 
-# Copy application code
+# Install other requirements
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Verify torch
+RUN python -c "import torch; print(f'Torch CPU: {torch.__version__}, CUDA: {torch.cuda.is_available()}')"
+
+# Copy ALL source code (backend will use everything)
 COPY src/ /app/src/
 
-# Create necessary directories
-RUN mkdir -p /app/data /app/logs
-
-# Create non-root user for security
+# Create non-root user
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
-# Expose default port (Render will override)
 EXPOSE 8000
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Run the application with PORT from environment or default to 8000
 CMD uvicorn src.backend.main:app --host 0.0.0.0 --port ${PORT:-8000}

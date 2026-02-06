@@ -1,3 +1,6 @@
+import gzip
+from fastapi.responses import JSONResponse
+from fastapi.middleware.gzip import GZipMiddleware
 """
 Main FastAPI application for AWS Risk Copilot
 Working version with all syntax errors fixed
@@ -670,3 +673,19 @@ async def get_company_details(ticker: str):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+@app.get("/health")
+async def health():
+    response = {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "service": "risk-copilot",
+        "version": "1.0.0",
+        "redis": "connected" if redis_client else "disconnected",
+        "memory_mb": process.memory_info().rss / (1024 * 1024),
+        "memory_percent": process.memory_percent()
+    }
+    return JSONResponse(
+        content=response,
+        headers={"Cache-Control": "max-age=30"}
+    )

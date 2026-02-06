@@ -6,12 +6,13 @@ streamlit==1.28.1
 # Database & Cache
 redis==5.0.1
 
-# AI/ML (lightweight versions)
+# AI/ML with LIGHTWEIGHT TORCH (CPU only - NO CUDA)
+torch==2.1.0 --index-url https://download.pytorch.org/whl/cpu
 sentence-transformers==2.2.2
 google-generativeai==0.3.2
-faiss-cpu==1.7.4
+faiss-cpu==1.7.4  # Use CPU version
 
-# Data processing
+# Data processing (lightweight)
 pandas==2.1.4
 numpy==1.24.3
 plotly==5.18.0
@@ -24,3 +25,7 @@ psutil==5.9.6
 # Utilities
 pydantic==2.5.1
 python-dateutil==2.8.2
+
+# Remove these heavy dependencies if present:
+# transformers (use sentence-transformers only)
+# nltk (optional)

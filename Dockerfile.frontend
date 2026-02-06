@@ -4,33 +4,39 @@ WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
+# Copy ONLY what frontend needs
 COPY requirements.txt .
 
-# Upgrade pip and install dependencies with retry logic
+# Install frontend requirements (NO TORCH)
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt || \
-    (echo "First install failed, retrying..." && pip install --no-cache-dir -r requirements.txt)
+    pip install --no-cache-dir \
+    streamlit==1.28.1 \
+    requests==2.31.0 \
+    pandas==2.1.4 \
+    numpy==1.24.3 \
+    plotly==5.18.0 \
+    python-dotenv==1.0.0 \
+    redis==5.0.1
 
-# Copy application code
-COPY src/ ./src/
+# Copy frontend code
+COPY src/frontend/ /app/src/frontend/
+
+# Copy minimal backend for imports
+RUN mkdir -p /app/src/backend
+RUN echo '"""Minimal backend for imports"""' > /app/src/backend/__init__.py
 
 # Create non-root user
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
-# Expose default port (Render will override)
 EXPOSE 8501
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8501/_stcore/health', timeout=5)"
 
-# Run Streamlit with PORT from environment or default to 8501
 CMD streamlit run src/frontend/dashboard.py \
     --server.port=${PORT:-8501} \
     --server.address=0.0.0.0 \

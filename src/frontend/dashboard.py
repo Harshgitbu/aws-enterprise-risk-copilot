@@ -1,6 +1,6 @@
 """
 AWS Risk Copilot - Professional Dashboard
-Fixed and working version
+Fixed and working version with updated connection logic
 """
 
 import streamlit as st
@@ -19,7 +19,7 @@ from typing import Dict, List, Any, Optional
 # Add the src directory to Python path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-# Configuration
+# Configuration - Will be detected dynamically
 BACKEND_URL = os.getenv('BACKEND_URL', 'http://backend:8000')
 API_TIMEOUT = 10
 
@@ -495,7 +495,7 @@ class WorkingRiskDashboard:
                 "Select 2-3 companies to compare",
                 ["AAPL", "MSFT", "AMZN", "GOOGL", "TSLA", "META", "NVDA"],
                 default=["AAPL", "MSFT", "AMZN"]
-            )
+            ]
             
             if len(selected_companies) >= 2:
                 if st.button("Compare", use_container_width=True):
@@ -738,33 +738,49 @@ class WorkingRiskDashboard:
         )
 
 def main():
-    """Main entry point"""
+    """Main entry point with dynamic backend detection"""
     # Priority order for backend URLs
-    backend_urls = [
-        os.getenv("BACKEND_URL"),  # Render environment variable
-        "http://backend:8000",      # Docker Compose
-        "http://localhost:8000",    # Local development
-        "https://risk-copilot-backend.onrender.com",  # Render production
-        "http://54.88.98.50:8000"   # EC2 fallback
-    ]
+    backend_urls = []
     
+    # Environment variable (highest priority)
+    env_url = os.getenv("BACKEND_URL")
+    if env_url:
+        backend_urls.append(env_url)
+    
+    # Check if running in Docker container
+    if os.path.exists("/.dockerenv"):
+        backend_urls.append("http://backend:8000")  # Docker Compose service name
+    
+    # Local development
+    backend_urls.append("http://localhost:8000")
+    
+    # EC2 External
+    backend_urls.append("http://54.88.98.50:8000")
+    
+    # Render Production
+    backend_urls.append("https://risk-copilot-backend.onrender.com")
+    
+    # Try to connect
     backend_url = None
     for url in backend_urls:
-        if url:
-            try:
-                response = requests.get(f"{url}/health", timeout=5)
-                if response.status_code == 200:
-                    backend_url = url
-                    print(f"✅ Connected to backend at {url}")
-                    break
-            except Exception as e:
-                print(f"❌ Failed to connect to {url}: {e}")
-                continue
+        try:
+            print(f"🔍 Trying backend: {url}")
+            response = requests.get(f"{url}/health", timeout=3)
+            if response.status_code == 200:
+                backend_url = url
+                print(f"✅ Connected to backend at {url}")
+                break
+        except Exception as e:
+            print(f"❌ Failed to connect to {url}: {e}")
+            continue
     
+    # Fallback
     if not backend_url:
-        # Default to local
-        backend_url = "http://localhost:8000"
-        print(f"⚠️  Using default backend: {backend_url}")
+        if os.path.exists("/.dockerenv"):
+            backend_url = "http://backend:8000"
+        else:
+            backend_url = "http://localhost:8000"
+        print(f"⚠️  Using fallback backend: {backend_url}")
     
     # Initialize and run dashboard
     dashboard = WorkingRiskDashboard(backend_url)
