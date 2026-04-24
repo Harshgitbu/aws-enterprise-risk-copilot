@@ -25,3 +25,6 @@ test_*.json
 
 # Docker
 *.tar.gz
+Dockerfile.test
+test_requirements.txt
+.DS_Store

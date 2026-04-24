@@ -101,7 +101,7 @@ class UnifiedLLMService:
                     
                     if isinstance(result, dict):
                         result["source"] = "gemini"
-                        result["model"] = "gemini-2.5-flash-lite"
+                        result["model"] = self.clients["gemini"].model_name
                         result["response_time"] = time.time() - start_time
                         
                         # Estimate tokens

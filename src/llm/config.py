@@ -21,7 +21,7 @@ class APIConfig:
     
     # Google Gemini API (YOUR FREE TIER: 10 requests/minute)
     GEMINI_API_KEY: Optional[str] = os.getenv("GOOGLE_API_KEY")
-    GEMINI_MODEL: str = "gemini-2.5-flash-lite"  # Your actual free tier model
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
     GEMINI_MAX_TOKENS: int = 2048  # Reduced for 1GB RAM efficiency
     GEMINI_RATE_LIMIT: int = 8  # Conservative: 8 instead of 10 RPM for safety
     GEMINI_REQUEST_TIMEOUT: int = 30  # seconds

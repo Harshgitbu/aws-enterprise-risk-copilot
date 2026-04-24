@@ -42,3 +42,37 @@ cp .env.example .env
 
 # 3. Run with Docker
 docker-compose up --build
+
+## Operational Smoke Checks
+```bash
+# Backend health
+curl -fsS http://localhost:8000/health
+
+# Frontend health
+curl -fsS http://localhost:8501/_stcore/health
+
+# AI endpoint (Gemini if configured, degraded fallback otherwise)
+curl -sS -X POST http://localhost:8000/ai/copilot/advanced \
+  -H "Content-Type: application/json" \
+  -d '{"query":"Analyze Apple cybersecurity risk"}'
+```
+
+## EC2 Docker Disk Cleanup
+Run this when EC2 disk usage is high after repeated image builds.
+```bash
+chmod +x scripts/ec2_docker_cleanup.sh
+./scripts/ec2_docker_cleanup.sh
+```
+
+Recommended cadence:
+- Weekly on dev EC2 boxes
+- After major rebuilds
+- Before large deploy tests
+
+## Render Deployment Configuration
+- This repo now includes `render.yaml` for service definitions.
+- Set sensitive values in Render dashboard env vars (never commit secrets):
+  - `GOOGLE_API_KEY`
+  - `NEWSAPI_KEY`
+  - `FINNHUB_API_KEY`
+  - `SEC_EDGAR_EMAIL`

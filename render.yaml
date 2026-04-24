@@ -1,0 +1,44 @@
+services:
+  - type: keyvalue
+    name: risk-copilot-redis
+    plan: free
+    ipAllowList: []
+
+  - type: web
+    name: risk-copilot-backend
+    env: docker
+    dockerfilePath: ./Dockerfile.backend
+    autoDeploy: true
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "8000"
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: risk-copilot-redis
+          property: connectionString
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.0-flash
+      - key: NEWSAPI_KEY
+        sync: false
+      - key: FINNHUB_API_KEY
+        sync: false
+      - key: SEC_EDGAR_EMAIL
+        sync: false
+
+  - type: web
+    name: risk-copilot-frontend
+    env: docker
+    dockerfilePath: ./Dockerfile.frontend
+    autoDeploy: true
+    healthCheckPath: /_stcore/health
+    envVars:
+      - key: PORT
+        value: "8501"
+      - key: RENDER
+        value: "true"
+      - key: BACKEND_URL
+        value: https://risk-copilot-backend.onrender.com

@@ -60,6 +60,41 @@ AWS Risk Copilot achieves **$0.00 monthly cost** by fully utilizing AWS Free Tie
 - S3 lifecycle policies to delete old data
 - ECR image cleanup after deployments
 
+#### Recommended ECR lifecycle policy
+Use a lifecycle rule to keep only recent images and stay inside free-tier storage:
+- Keep the latest 10 tagged images
+- Expire untagged images after 1 day
+
+Example:
+```json
+{
+  "rules": [
+    {
+      "rulePriority": 1,
+      "description": "Expire untagged images quickly",
+      "selection": {
+        "tagStatus": "untagged",
+        "countType": "sinceImagePushed",
+        "countUnit": "days",
+        "countNumber": 1
+      },
+      "action": { "type": "expire" }
+    },
+    {
+      "rulePriority": 2,
+      "description": "Keep only latest 10 tagged images",
+      "selection": {
+        "tagStatus": "tagged",
+        "tagPrefixList": [""],
+        "countType": "imageCountMoreThan",
+        "countNumber": 10
+      },
+      "action": { "type": "expire" }
+    }
+  ]
+}
+```
+
 ### 4. Monitoring Optimization
 - Reduced CloudWatch metric frequency
 - Aggregated logging

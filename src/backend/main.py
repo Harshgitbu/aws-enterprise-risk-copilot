@@ -12,6 +12,7 @@ import json
 import psutil
 from datetime import datetime
 import logging
+from dotenv import load_dotenv
 logger = logging.getLogger(__name__)
 
 from fastapi import FastAPI, HTTPException, Request
@@ -22,6 +23,10 @@ from typing import Dict, Any, List, Optional
 
 # Add the src directory to Python path for imports
 sys.path.append('/app/src')
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+# Load .env for non-Docker local runs.
+load_dotenv()
 
 # Import our modules - with error handling
 RAG_AVAILABLE = False
@@ -251,7 +256,9 @@ async def ask_advanced_copilot(query_request: dict):
         
         # Check if Gemini API key is available
         gemini_api_key = os.getenv("GOOGLE_API_KEY")
-        
+        llm_status = "fallback"
+        llm_error = None
+
         if gemini_api_key and len(gemini_api_key) > 20:
             try:
                 import google.generativeai as genai
@@ -259,8 +266,9 @@ async def ask_advanced_copilot(query_request: dict):
                 # Configure Gemini
                 genai.configure(api_key=gemini_api_key)
                 
-                # Use correct model
-                model = genai.GenerativeModel('gemini-2.0-flash')
+                # Use centralized default model with safe fallback.
+                gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+                model = genai.GenerativeModel(gemini_model)
                 
                 # Create context-aware prompt
                 prompt = f"""You are an AI Risk Copilot for an enterprise risk intelligence platform.
@@ -284,7 +292,7 @@ Provide a professional, actionable response focused on risk analysis and recomme
                         "confidence": 0.9,
                         "response_time": 1.2,
                         "context_used": True,
-                        "llm_used": "gemini-2.0-flash",
+                        "llm_used": gemini_model,
                         "conversation_id": 1,
                         "timestamp": datetime.utcnow().isoformat()
                     },
@@ -293,7 +301,10 @@ Provide a professional, actionable response focused on risk analysis and recomme
                 
             except Exception as gemini_error:
                 logger.warning(f"Gemini API error: {gemini_error}")
-                # Fall through to rule-based response
+                llm_error = str(gemini_error)
+                llm_status = "gemini_error"
+        else:
+            llm_status = "missing_google_api_key"
         
         # Fallback: Rule-based responses
         query_lower = query.lower()
@@ -399,7 +410,7 @@ I've analyzed your query: "{query}"
 **Note**: Configure GOOGLE_API_KEY for Gemini AI responses."""
 
         return {
-            "status": "success",
+            "status": "degraded",
             "response": {
                 "query": query,
                 "answer": answer,
@@ -407,7 +418,9 @@ I've analyzed your query: "{query}"
                 "confidence": 0.8,
                 "response_time": 0.1,
                 "context_used": True,
-                "llm_used": "enhanced_rule_based",
+                "llm_used": "enhanced_rule_based_fallback",
+                "llm_status": llm_status,
+                "llm_error": llm_error,
                 "conversation_id": 1,
                 "timestamp": datetime.utcnow().isoformat()
             },
@@ -421,11 +434,16 @@ I've analyzed your query: "{query}"
 # ==================== NEWS ENDPOINTS ====================
 
 @app.post("/news/fetch")
-async def fetch_news(max_companies: int = 5):
+async def fetch_news(payload: Optional[dict] = None, max_companies: int = 5):
     """
     Fetch latest financial news for companies
     """
     try:
+        if payload and isinstance(payload, dict):
+            payload_max = payload.get("max_companies")
+            if isinstance(payload_max, int) and payload_max > 0:
+                max_companies = payload_max
+
         return {
             "status": "success",
             "message": f"Fetched news for {max_companies} companies",
@@ -525,7 +543,8 @@ async def search_companies(query: str = "", sector: str = "", limit: int = 20):
                 match_score = 1
             
             if match_score > 0:
-                risk_score = 50 + hash(company["ticker"]) % 30
+                stable_hash = sum(ord(char) for char in company["ticker"])
+                risk_score = 50 + stable_hash % 30
                 
                 results.append({
                     "name": company["name"],
@@ -666,6 +685,8 @@ async def get_company_details(ticker: str):
         else:
             raise HTTPException(status_code=404, detail=f"Company {ticker} not found")
             
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error getting company details: {e}")
         raise HTTPException(status_code=500, detail=str(e))
