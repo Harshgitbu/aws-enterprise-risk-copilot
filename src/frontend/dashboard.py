@@ -332,7 +332,6 @@ class WorkingRiskDashboard:
                     )
                     
                     if result and result.get("status") in {"success", "degraded"}:
-                    if result and result.get("status") in {"success", "degraded"}:
                         response = result.get("response", {}).get("answer", "I couldn't generate a response.")
                         llm_status = result.get("response", {}).get("llm_status")
                         if llm_status and llm_status != "fallback":
