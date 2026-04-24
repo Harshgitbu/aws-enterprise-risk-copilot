@@ -21,6 +21,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 # Configuration
 BACKEND_URL = os.getenv('BACKEND_URL')
+BACKEND_URL = os.getenv('BACKEND_URL')
 API_TIMEOUT = 10
 
 # Set page configuration
@@ -331,7 +332,11 @@ class WorkingRiskDashboard:
                     )
                     
                     if result and result.get("status") in {"success", "degraded"}:
+                    if result and result.get("status") in {"success", "degraded"}:
                         response = result.get("response", {}).get("answer", "I couldn't generate a response.")
+                        llm_status = result.get("response", {}).get("llm_status")
+                        if llm_status and llm_status != "fallback":
+                            st.caption(f"AI mode: degraded (`{llm_status}`), using fallback response.")
                         llm_status = result.get("response", {}).get("llm_status")
                         if llm_status and llm_status != "fallback":
                             st.caption(f"AI mode: degraded (`{llm_status}`), using fallback response.")
@@ -803,6 +808,7 @@ def main():
         if url:
             try:
                 response = requests.get(f"{url}/health", timeout=2)
+                response = requests.get(f"{url}/health", timeout=2)
                 if response.status_code == 200:
                     backend_url = url
                     print(f"✅ Connected to backend at {url}")
@@ -822,6 +828,7 @@ def main():
         print(f"⚠️  Using fallback backend: {backend_url}")
 =======
         # Default to local
+        backend_url = env_backend or "http://localhost:8000"
         backend_url = env_backend or "http://localhost:8000"
         print(f"⚠️  Using default backend: {backend_url}")
 >>>>>>> Stashed changes
