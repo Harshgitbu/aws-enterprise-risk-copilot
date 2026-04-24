@@ -746,12 +746,7 @@ class WorkingRiskDashboard:
         )
 
 def main():
-<<<<<<< Updated upstream
     """Main entry point with dynamic backend detection"""
-    # Priority order for backend URLs
-    backend_urls = []
-=======
-    """Main entry point"""
     # Priority order for backend URLs:
     # 1) explicit env var 2) platform-appropriate defaults.
     backend_urls = []
@@ -770,7 +765,6 @@ def main():
             "https://risk-copilot-backend.onrender.com",  # Render production
             "http://54.88.98.50:8000"   # EC2 fallback
         ])
->>>>>>> Stashed changes
     
     # Environment variable (highest priority)
     env_url = os.getenv("BACKEND_URL")
@@ -793,7 +787,6 @@ def main():
     # Try to connect
     backend_url = None
     for url in backend_urls:
-<<<<<<< Updated upstream
         try:
             print(f"🔍 Trying backend: {url}")
             response = requests.get(f"{url}/health", timeout=3)
@@ -804,34 +797,18 @@ def main():
         except Exception as e:
             print(f"❌ Failed to connect to {url}: {e}")
             continue
-=======
-        if url:
-            try:
-                response = requests.get(f"{url}/health", timeout=2)
-                response = requests.get(f"{url}/health", timeout=2)
-                if response.status_code == 200:
-                    backend_url = url
-                    print(f"✅ Connected to backend at {url}")
-                    break
-            except Exception as e:
-                print(f"❌ Failed to connect to {url}: {e}")
-                continue
->>>>>>> Stashed changes
     
     # Fallback
     if not backend_url:
-<<<<<<< Updated upstream
-        if os.path.exists("/.dockerenv"):
+        # Fallback logic: prefer BACKEND_URL if set, otherwise try to detect Docker, otherwise default to localhost
+        env_backend = os.getenv("BACKEND_URL")
+        if env_backend:
+            backend_url = env_backend
+        elif os.path.exists("/.dockerenv"):
             backend_url = "http://backend:8000"
         else:
             backend_url = "http://localhost:8000"
         print(f"⚠️  Using fallback backend: {backend_url}")
-=======
-        # Default to local
-        backend_url = env_backend or "http://localhost:8000"
-        backend_url = env_backend or "http://localhost:8000"
-        print(f"⚠️  Using default backend: {backend_url}")
->>>>>>> Stashed changes
     
     # Initialize and run dashboard
     dashboard = WorkingRiskDashboard(backend_url)
